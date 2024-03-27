@@ -1,0 +1,567 @@
+{
+  "code": 0,
+  "data": {
+    "records": [
+      {
+        "id": "1772506865981321218",
+        "title": "MinIO+Docker从零搭建一个文件存储服务",
+        "description": "本文，将带你使用 MinIO + Docker 来从零搭建一个文件存储服务，并在 SpringBoot 项目中上传图片到 MinIO 中。",
+        "content": "本文，将带你使用 MinIO + Docker 来从零搭建一个文件存储服务，并在 SpringBoot 项目中上传图片到 MinIO 中。\n\n# 一.为什么要自己搭建？\n\n对于个人来说，当然是**攻击风险**。第三方对象存储服务通常会收取费用，尤其随着数据量的增加，费用也会相应增加，而通过自己搭建文件存储服务器，可以有效控制成本。其实费用还好，个人小项目访问量不大花不了多少钱，最重要的是**被攻击刷流量就GG了**。例如：\n\n**个人小博客被攻击：**\n\n\n![1.png](https://pic.code-nav.cn/post_picture/1619305100524748802/3JFTOu2Q-1.png)\n\n\n**某知名up主被刷爆：**\n\n\n![2.png](https://pic.code-nav.cn/post_picture/1619305100524748802/o6nmai0c-2.png)\n\n\n\n虽然个人小项目一般不会被攻击，但就问你看到-1.5w慌不慌？接下来让我们来学习一下如何使用MinIO搭建一个自己的文件存储服务器吧~\n\n# 二.为什么使用MinIO？\n\n[MinIO](https://www.minio.org.cn/) 是一个**高性能**的轻量级对象存储服务器。它具有分布式，高可用性和水平扩展的特点，它非常适合用于大规模数据存储和分析。其优点包括**低延迟、高吞吐量、易于部署和管理**。\n\n怕很拉跨不敢用？\n\n截止目前，MinIO 在 [Github](https://github.com/minio/minio) 上有 **43.7k** Star。\n\n国内阿里巴巴、腾讯、百度、华为、中国移动、中国联通等企业都有在使用 MinIO，甚至不少商业公司二次开发 MinIO 来提供商业化的云存储产品。\n\n\n![3.png](https://pic.code-nav.cn/post_picture/1619305100524748802/0Rzs3v0K-3.png)\n\n\n# 三.搭建MinIO\n\n## (1) 引言\n\nMinIO 的[官方文档](https://www.minio.org.cn/download.shtml#/docker)上介绍了多种下载方式:\n\n\n![4.png](https://pic.code-nav.cn/post_picture/1619305100524748802/IusCcTNl-4.png)\n\n\n本文我们只介绍如何**使用 Docker 基于CentOS 服务器来进行服务的搭建**，如果未安装Docker可以通过[本文（点击跳转）](https://blog.csdn.net/m0_66570338/article/details/128786952)来了解和安装Docker，或者在[官方文档](https://www.minio.org.cn/download.shtml#/docker)挑选自己擅长的方式进行搭建~\n\n\n![5.png](https://pic.code-nav.cn/post_picture/1619305100524748802/6YRqhbIm-5.png)\n\n## (2) 安装\n\n1. **首先我们要创建两个文件目录：一个用来存放 MinIO 的配置文件，一个用来存储我们上传文件数据。**\n\n```sh\nmkdir -p /home/minio/config\nmkdir -p /home/minio/data\n```\n\n- `/home/minio/config` 用于存放 MinIO 的配置文件\n-  `/home/minio/data` 用于存储上传的文件数据\n\n2. **接下来我们可以通过如下命令拉取最新版镜像并创建 MinIO 容器运行。如果需要下载指定版本可以[点击前往DockerHub仓库](https://hub.docker.com/r/minio/minio/tags)选择下载。**\n\n```sh\ndocker run -p 9000:9000 -p 9001:9001 \\\n-d --restart=always \\\n-e \"MINIO_ACCESS_KEY=admin\" \\\n-e \"MINIO_SECRET_KEY=password\" \\\n-v /home/minio/data:/data \\\n-v /home/minio/config:/root/.minio \\\nminio/minio server \\\n/data \\\n--console-address \":9001\" \n```\n\n**运行效果：**\n\n\n![6.png](https://pic.code-nav.cn/post_picture/1619305100524748802/vzpZEPkj-6.png)\n\n**命令行解释：**\n\n- `MINIO_ACCESS_KEY` 和 `MINIO_SECRET_KEY` 为UI界面登录账号密码\n- `-d ` 将容器以后台（守护进程）模式运行，并与终端分离。\n- `--restart=always` 选项指定容器在停止后总是自动重启。\n- `/home/minio/data` 挂载的存储上传文件的目录\n- `/home/minio/config` 挂载的配置文件\n- `minio/minio server` 使用MinIO 镜像并启动\n- `/data` 要使用的数据目录\n- `--console-address` 指定UI 界面的端口\n- `9000:9000` 映射服务器端口\n- `9001:9001` 映射UI界面端口\n\n**补充说明：**\n\n> Docker的run指令会首先在本地查找指定的镜像，如果本地没有找到对应的镜像，则会自动去远程镜像仓库拉取该镜像并在本地运行。\n>\n> 当不带有标签（tag）的镜像名称时，Docker默认会使用latest标签来拉取最新版本的镜像。例如，如果运行`docker run ubuntu`，Docker会首先在本地查找名为ubuntu:latest的镜像是否存在，如果不存在，则会从默认的远程镜像仓库（如Docker Hub）拉取最新版本的ubuntu镜像，并在本地运行。\n>\n> 如果指定了具体的标签或版本号，例如`docker run ubuntu:18.04`，Docker会尝试在本地查找名为ubuntu:18.04的镜像，如果本地没有找到，则会从远程镜像仓库拉取对应的镜像。\n>\n> 需要注意的是，如果在远程镜像仓库中找不到指定的镜像，或者无法连接到远程镜像仓库，Docker的run指令将无法成功运行，并会报错提示找不到镜像。\n\n3. **最后在浏览器中访问 [http://服务器IP:9001](http://服务器IP:9001)，即可访问到MinIO的控制台。**\n\n\n![7.png](https://pic.code-nav.cn/post_picture/1619305100524748802/SzaaQ5ce-7.png)\n\n\n**可以输入账号 admin，密码 password 进行登录，进入首页。**\n\n\n![8.png](https://pic.code-nav.cn/post_picture/1619305100524748802/viLyeV8A-8.png)\n\n可以发现它的界面和我们使用的一些第三方对象存储服务非常相似，接下来我们也要进行一系列的配置~\n\n## (3) 配置\n\n1. **创建一个 Bucket 存储桶，用于稍后文件的上传操作。**\n\n\n![9.png](https://pic.code-nav.cn/post_picture/1619305100524748802/boR5hbCo-9.png)\n\n2. **前往创建用于远程操作的AccessKey 和 SecretKey**.\n\n![10.png](https://pic.code-nav.cn/post_picture/1619305100524748802/mcHueZSi-10.png)\n\n\n3. **创建并保存好生成Access Key 和 Secret Key**.\n\n\n![11.png](https://pic.code-nav.cn/post_picture/1619305100524748802/1tQ7Ulrd-11.png)\n\n\n4. **默认配置下，访问存储桶是需要请求授权的。但是在实际场景下，我们往往希望允许直接访问，此时就需要添加一条 readonly 访问规则。**\n\n\n![14.png](https://pic.code-nav.cn/post_picture/1619305100524748802/rzjFu3JE-14.png)\n\n进入配置存储桶界面\n\n\n![15.png](https://pic.code-nav.cn/post_picture/1619305100524748802/gSroHOCY-15.png)\n\n\n进行配置，添加只读规则\n\n\n![16.png](https://pic.code-nav.cn/post_picture/1619305100524748802/0d4vyhos-16.png)\n\n至此，我们已经基本完成了MinIO的简单配置，当然如果想要更安全，同样是可以像使用第三方对象存储服务一样创建用户组，分配权限等诸如此类的操作。\n\n## (4) 测试\n\n1. **我们上传一张图片并访问来测试一下是否搭建成功。**\n\n\n![12.png](https://pic.code-nav.cn/post_picture/1619305100524748802/gkeRd7LT-12.png)\n\n2. **可以看到成功上传了图片**\n\n![13.png](https://pic.code-nav.cn/post_picture/1619305100524748802/yB0bvDQW-13.png)\n\n3. 接下来我们在浏览器访问 `http://服务器IP:9000/{bucket存储桶名字}/{name图片后缀名}` 来进行访问。例如我刚上传的文件 `{bucket}` 是 guanzhi，`{name}` 是 csdn.png，所以最终的访问路径是 `http://服务器IP:9000/guanzhi/csdn.png`。\n\n\n![17.png](https://pic.code-nav.cn/post_picture/1619305100524748802/EK6LNhV5-17.png)\n\n\n测试成功，能够正常使用，接下来我们来学习一下如何在Java项目中使用吧~\n\n# 四.在项目中使用\n\n## (1) 引言\n\n[官方文档](https://min.io/docs/minio/linux/developers/java/minio-java.html)上有介绍多种语言的SDK使用指南，本篇我们只**学习如何在Java的Maven项目中进行使用**，其他语言的同学可以跟着[官方文档](https://min.io/docs/minio/linux/developers/java/minio-java.html)尝试一下~\n\n\n![18.png](https://pic.code-nav.cn/post_picture/1619305100524748802/E1l0toSI-18.png)\n\n\n## (2) 初步尝试\n\n1. **首先在我们创建的Maven项目中引入如下依赖**\n\n```xml\n <!-- MinIO 客户端 -->\n<dependency>\n    <groupId>io.minio</groupId>\n    <artifactId>minio</artifactId>\n    <version>8.5.9</version>\n</dependency>\n```\n\n2. **接下来我们尝试一下官方给出的demo（已经添加详细注释，可以查看下述示例代码）**\n\n```java\n@SpringBootTest\nclass DemoApplicationTests {\n\n    @Test\n    void demo() {\n        try {\n            // 1.创建MinIO客户端，与其建立连接，用于我们上传文件操作\n            // Create a minioClient with the MinIO server playground, its access key and secret key.\n            MinioClient minioClient = MinioClient.builder()\n                    .endpoint(\"http://服务器ip:9000\") // 地址为服务器ip+端口号\n                    .credentials(\"1AYD2DY8qPz5vp0WmQtJ\",\n                            \"BQeSptD5wO9vPIwtthNg5BbFswPx7WhsPh1Slp0M\") // 我们配置并保存的 AccessKey 和 SecretKey\n                    .build();\n\n            // 2.创建存储桶，这一步我们可以直接在界面手动创建一次即可，因此可以省略\n            // Make 'asiatrip' bucket if not exist.\n            boolean found = minioClient.bucketExists(BucketExistsArgs.builder().bucket(\"guanzhi\").build());\n            if (!found) {\n                // Make a new bucket called 'asiatrip'.\n                minioClient.makeBucket(MakeBucketArgs.builder().bucket(\"guanzhi\").build());\n            } else {\n                System.out.println(\"Bucket 'guanzhi' already exists.\");\n            }\n\n            // 3. 上传文件\n            // Upload '/home/user/Photos/asiaphotos.zip' as object name 'asiaphotos-2015.zip' to bucket 'asiatrip'.\n            minioClient.uploadObject(\n                    UploadObjectArgs.builder()\n                            .bucket(\"guanzhi\") // 上传到哪个存储桶？\n                            .object(\"pom.xml\") // 上传的文件命名为什么？\n                            .filename(\"C:\\\\code\\\\demo\\\\pom.xml\") // 上传文件的路径？\n                            .build());\n            System.out.println(\n                    \"'C:\\\\code\\\\demo\\\\pom.xml' is successfully uploaded as \"\n                            + \"object 'pom.xml\\\"' to bucket 'guanzhi'.\");\n        } catch (MinioException e) {\n            System.out.println(\"Error occurred: \" + e);\n            System.out.println(\"HTTP trace: \" + e.httpTrace());\n        } catch (IOException | NoSuchAlgorithmException | InvalidKeyException e) {\n            throw new RuntimeException(e);\n        }\n    }\n}\n```\n\n3. **可以发现运行成功。**\n\n\n![19.png](https://pic.code-nav.cn/post_picture/1619305100524748802/KMMqMZl2-19.png)\n\n\n**查看控制台，可以看成功上传了文件。**\n\n\n![20.png](https://pic.code-nav.cn/post_picture/1619305100524748802/9L3Z5ckb-20.png)\n\n## (3) 在SpringBoot中使用\n\n我们来简单写一个文件上传功能。\n\n1. **项目中除了上述依赖，我们还需要引入如下依赖**\n\n```xml\n        <!-- 实现对 Spring MVC 的自动化配置 -->\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-web</artifactId>\n        </dependency>\n        </dependency>\n\t\t<!-- lombok插件-->\n         <dependency>\n            <groupId>org.projectlombok</groupId>\n            <artifactId>lombok</artifactId>\n            <optional>true</optional>\n        </dependency>\n```\n\n2. **新建 MinIO 配置类，创建 MinioClient Bean**\n\n```java\n@Configuration\n@ConfigurationProperties(prefix = \"file.minio\")\n@Data\npublic class MinioConfiguration {\n    \n    private String accessKey;\n\n    private String secretKey;\n\n    private String endpoint;\n\n    private String bucket;\n\n    @Bean\n    public MinioClient minioClient() {\n        return MinioClient.builder()\n                .endpoint(endpoint)\n                .credentials(accessKey, secretKey)\n                .build();\n    }\n}\n```\n\n3. **在application.yml中编写配置**\n\n```yml\n# 对象存储服务配置\nfile:\n  # MinIO自搭建对象存储服务\n  minio:\n    endpoint: http://服务器ip:9000 #存储服务域名\n    accessKey: 1AYD2DY8qPz5vp0WmQtJ \n    secretKey: BQeSptD5wO9vPIwtthNg5BbFswPx7WhsPh1Slp0M\n    bucket: guanzhi   #存储桶名称\n```\n\n4. **编写controller**\n\n```java\n@RestController\n@RequestMapping(\"/file\")\npublic class FileController {\n\n    @Resource\n    private MinioClient minioClient;\n\n    @Resource\n    private MinioConfiguration minioConfiguration;\n\n    /**\n     * 上传文件\n     */\n    @PostMapping(\"/upload\")\n    public String upload(@RequestParam(\"file\") MultipartFile file) throws Exception {\n        // 上传\n        String path = UUID.randomUUID() + file.getOriginalFilename(); // 文件名，使用 UUID 随机\n        minioClient.putObject(PutObjectArgs.builder()\n                .bucket(minioConfiguration.getBucket()) // 存储桶\n                .object(path) // 文件名\n                .stream(file.getInputStream(), file.getSize(), -1) // 文件内容\n                .contentType(file.getContentType()) // 文件类型\n                .build());\n        // 拼接路径\n        return String.format(\"%s/%s/%s\", minioConfiguration.getEndpoint(), minioConfiguration.getBucket(), path);\n    }\n}\n```\n\n5. **启动SpringBoot项目，测试接口,可以看到后端正确响应了文件Url.**\n\n\n![21.png](https://pic.code-nav.cn/post_picture/1619305100524748802/Bf8KNhwH-21.png)\n\n\n6. **可以看到控制台存储桶中也有文件**\n\n\n![22.png](https://pic.code-nav.cn/post_picture/1619305100524748802/6eHVDS3G-22.png)\n\n7. 在浏览器中我们也成功的通过返回的url访问到了图片\n\n\n![23.png](https://pic.code-nav.cn/post_picture/1619305100524748802/OG0dY5fb-23.png)\n\n至此，我们已经完成了服务器的搭建，赶紧用起来吧~\n\n\n\n\n\n",
+        "category": "文章",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 8,
+        "thumbNum": 1,
+        "favourNum": 1,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1619305100524748802",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-26 14:12:23",
+        "updateTime": "2024-03-26 19:56:44",
+        "user": {
+          "id": "1619305100524748802",
+          "planetCode": "6872",
+          "userName": "观止.",
+          "userAvatar": "https://thirdwx.qlogo.cn/mmopen/vi_32/OYu6LaaicHd8CDShMPqharTUTck82BzOggVOzdsF3AqPyVMRjAjEicQpvpQTQAeUFOvnsPuHLBTYNDWMgsg0r5LQ/132",
+          "gender": null,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": [],
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": null,
+          "jobStatus": null,
+          "company": null,
+          "job": null,
+          "workYear": -4,
+          "direction": null,
+          "goal": null,
+          "github": null,
+          "blog": null,
+          "score": 10,
+          "coin": 100,
+          "followeeNum": 13,
+          "followNum": 0,
+          "followStatus": null,
+          "vipExpireTime": "2025-04-20 21:41:38",
+          "lastLoginTime": null,
+          "createTime": "2023-01-28 20:03:15",
+          "updateTime": "2024-03-18 15:47:47"
+        },
+        "tags": [
+          "文章"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1772157990724509697",
+        "title": "提示工程进阶技巧",
+        "description": "AI 提示工程",
+        "content": "四个基本原则\n\n提示应引导模型生成有用的输出。\n对任务进行描述，并设置任务要求。\n向模型展示你期望的输出。\n尝试多种公式、模式的组合来设计提示，以获得最佳的生成内容。\n\n基础模式\n\n一、指令模式\n\n提示应引导模型生成有用的输出\n\n我们给模型提供一些特定信息，例如问题或关键词，模型需要生成与这些信息相关的文本。这种模式称为特定指令（By specific）模式，通常用于生成答案、解释或推荐等。特定信息可以是单个问题或多个关键词，具体取决于任务的要求。\n\n![image.png](https://pic.code-nav.cn/post_picture/1612254411675926529/K4kgwTxe-image.png)\n\n指令主要是动词。举例：\n永和九年，岁在癸丑，暮春之初，会于会稽山阴之兰亭，修禊事也。翻译一下：\n我觉得食物还可以。将上述文本按中立、负面或正面进行分类：\n解释抗生素是什么：\n研究论文中的作者贡献声明和致谢应明确说明作者在准备手稿和分析时是否使用了 ChatGPT 等人工智能技术，以及在多大程度上使用了这些技术。它们还应指出使用了哪些 LLM。这将提醒编辑和审稿人更加仔细地审查手稿，以发现潜在的偏见、不准确和不适当的来源来源。同样，科学期刊应该对LLM的使用保持透明，例如在选择提交的稿件时。提取上文中提到的大语言模型：\n\n二、指令模板模式\n\n对任务进行描述，并设置任务要求\n\n我们给模型提供一些明确的指令，模型需要根据这些指令生成文本。这种模式称为指令模板（Instruction Template）模式，这种模式通常用于生成类似于技术说明书、操作手册等需要明确指令的文本。指令可以是单个句子或多个段落，具体取决于任务的要求。\n\n\n![image.png](https://pic.code-nav.cn/post_picture/1612254411675926529/zGdjj7SC-image.png)\n举例：\n使用 STAR 原则与下面的格式总结一下这段话：\n\"\"\"\n最近几天，因为工作 + 兴趣的原则，略（需总结的话）…\n\"\"\"\n情境(Situation): \n任务(Task): <comma_separated_list_of_task> \n行动(Action):  -||- \n结果(Result):  -||- 。\n输出文本时要注意中英文之间插入空格，留出间隔，诸如于 \"\"\"Hello 你好\"\"\"，用这种方式输出一下刚才的文本：\n\n三、示例模式\n\n向模型展示你期望的输出\n\n我们给模型提供一些示例文本，模型需要生成与示例文本类似的文本。这种模式称为示例模式（By demonstration）。这种模式通常用于生成类似于给定示例的文本，例如自动生成电子邮件、产品描述、新闻报道等。示例文本可以是单个句子或多个段落，具体取决于任务的要求。\n\n\n![image.png](https://pic.code-nav.cn/post_picture/1612254411675926529/SjbM9J2q-image.png)\n举例：\n任务表述 颜色代表了温度\n例子1 绿色代表寒冷 \n例子2 蓝色代表寒冷 \n例子3 红色代表温暖 \n例子4 黄色代表温暖 \n执行 橙色代表什么\n\n提示词框架\n\nElavis Saravia( DARI.AI )总结了一种 Prompt 书写框架。他认为一个 Prompt 里需包含以下几个元素：\nInstruction（必选）：指令，即你希望模型执行的具体任务。\nContext（选填）： 背景信息，或者说是上下文信息，这可以引导模型做出更好的反应。\nInput Data（选填）： 输入数据，告知模型需要处理的数据。\nOutput Indicator（选填）： 输出指示器，告知模型我们要输出的类型或格式。\n\nMatt Nigh 总结了另一种 Prompt 书写框架——CRISPE Framework：\nCR： Capacity and Role（能力与角色）。你希望 ChatGPT 扮演怎样的角色。\nI： Insight（洞察力），背景信息和上下文（坦率说来我觉得用 Context 更好）。\nS： Statement（指令），你希望 ChatGPT 做什么。\nP： Personality（个性），你希望 ChatGPT 以什么风格或方式回答你。\nE： Experiment（尝试），要求 ChatGPT 为你提供多个答案。\n\n\n![image.png](https://pic.code-nav.cn/post_picture/1612254411675926529/DHEfMtmY-image.png)\n\n\n提示词元素\n提示词基本元素\n\n上述几个框架都有着下述共同的元素：\n\n角色（Role/Capacity and Role ）\n上下文（Insight/Context）\n指令（Instruction/Statement）\n\n另外还有着一些类似的元素：\n输入数据（InputData）\n回答期望（OutputIndicator/Personality+Experiment）\n样本（Example）\n\n角色\n\n在 Prompt编写模式 的提示工程文章中，使用了“角色”的提示被分类到代理模式（By proxy）。是指用户可以要求 ChatGPT以特定的身份、角色或者身份扮演某个特定的人、角色或对象来生成回答。这种模式通常用于模拟某个特定人物的语言风格和语境，生成特定情境下的对话、回答或其他形式的文本。\n\n角色实际上是属于“上下文”的一种。通过提供与该角色相关的语境，可以更好地让 ChatGPT 生成与该语境关联度更高的文本。learnprompting.org 有这么一个示例：\nUser：你是一个伟大的数学家，你有能力解决世界上所有的问题。尝试解决下面描述的问题：\n100*100/400*56的结果是多少？\nAI：The answer is 1400.\n\n上下文\n\n是在你希望模型在回答问题/执行指令时使用的任何相关信息。常用于下面几种场景：\n对于 ChatGPT尚不存在的概念，可以（通过如 Google 相关内容之后）通过上下文的方式加入提示中；\n提供问题/指令的发生背景、处理语境等，例如前面提到的角色；\n提供提问/输入数据的所属分类、来源等，例如：下面的内容来源于IT博客；\n示例：\n示例一：\n根据下面的文本重新解释一下 ControlNet：\n- 官网介绍：ControlNet is a neural network structure to control diffusion models by adding extra conditions.\n- 模式：根据给的底图，生成一个类似建模效果（法线贴图）的中间图，再生成图片 \n- 场景：用来实现骨骼绑定、精准控线、线稿上色、依据深度图结构透视精准重绘等。\n\n示例二：\n使用 STAR 原则总结一下这段话：\n略…\n\n指令\n\n最简单的指令就是一个动词。通过对需要执行的任务/操作的对象进行更详细的描述，则形成一条更长的指令。具体可参考基础模式中的“指令模式”及“指令模板模式”章节内容。\n\n回答期望\n\n情境(Situation): \n任务(Task): <comma_separated_list_of_task> \n行动(Action):  -||- \n结果(Result):  -||- 。\n输出文本时要注意中英文之间插入空格，留出间隔，诸如于 \"\"\"Hello 你好\"\"\"，用这种方式输出一下刚才的文本：\n在 DAIR.AI 的文章中，回答期望被称为“回答指示器”。顾名思义，是指用户指定的输出内容的类型或格式。常见的有以下几种写法：\n指定长度、样式：不少于 1000 字；用 SQL 语句表示；写一封 Email 邮件；\n指定风格：用 STAR 原则总结；用英文回答；用医生的口吻来回答；用7岁小孩也能听懂的方式来回答；\n指定格式：如上述的某种自定义DSL；用如下的json格式展示：{xxx}；生成一个包含了所述内容的表格；\n\n样本\n\n在基础模式中的示例模式中已出现过与“样本”相关的内容：\n样本本身可以提供回答内容的样本，一定程度上可以替代“回答期望（回答指示器）”元素。\n\n另外，样本有着多种编写技巧：如少样本提示、零样本提示、零样本 CoT 提示、样本去偏差，等 。其中 CoT 提示属于高级技巧。\n\n进阶技巧\n\n角色进阶技巧 1\n\n内容润色\n\n在一些内容改写、文章翻译、文案润色的任务中，如果我们希望模型用某种特定的风格、口吻来回答问题，我们除了能用前面提到的“回答期望”来调整提示外，还可以通过加入角色的方式来调整。\n举例：\n\n举例一：\n输入一封邮件，希望模型改写得更商务风格些：\n回答期望：加入商务、business等相关的词\n角色：让模型扮演一个商务人士，甚至可以直接扮演某个名人：想象一下你是苹果的CEO乔布斯，改写下面的Email…；\n\n举例二：\n将复杂的内容转变成 7、8岁小朋友也能听懂的话：\n你是一个小学老师，擅长将复杂的内容转变成 7、8岁小朋友也能听懂的话，…\n\n上下文进阶技巧 1\n\n使用\"\"\"符号将指令和需要处理的文本分开\n\n在 OpenAI 的 API 最佳实践文档里提到，如果你的文本有多段，增加 \"\"\" 会提升 AI 反馈的准确性。使用 ### 也能达到同样的效果。\n注意，这个是 OpenAI 的 GPT 产品特化的技巧。该现象与 OpenAI 的训练数据集的数据整理习惯有关。\n\n举例：\n\n❌\n请概括下列句子，使其更容易理解。OpenAl是美国人工智能(A)研究实验室，由...\n\n✅\n请概括下列句子\nText: \"\"\"\nOpenAl是美国人工智能(A)研究实验室，由...\n\"\"\"\n\n上下文进阶技巧 2\n\nTo do and Not To do\n\nTo do：在 OpenAI的 API 最佳实践文档 里，提到了一个这样的最佳实践：\n\"\"\"与其告知模型不能干什么，不妨告诉模型能干什么。\"\"\"\n如果你想要的是明确的答案，加入更多限定词，告知模型能干什么，回答的效率会更高。\n\n举例：\n\n❌\n\n以下是代理商和客户之间的对话。不要询问用户名或密码。不要重复回答。\n客户：我无法登录我的帐户。\n代理商：\n\n✅\n\n以下是代理商和客户之间的对话。代理商将尝试诊断问题并提出解决方案，同时避免询问任何用户身份相关的问题。当确实需要询问该类问题，如用户名及密码时，向用户提供帮助文档 www.samplewebsite.com/help/faq。\n客户：我无法登录我的帐户。\n代理商：\n\nNot To do：你已经告知模型很明确的点 (To do)，然后你想缩小范围，那增加一些 Not To do 会提高不少效率。\n在 Cohere 的提示工程文章中，使用了“Not To do”技巧的提示被分类到负向提示（Negative prompt）模式。\n示例：\n我们来玩一个名为 kfc的谜语创作游戏，当我说 \"kfc\"，你写一个谜题，要求： \n不少于 200 字 \n谜题不能出现肯德基、星期四、KFC \n正文可以夹杂小语种语言，如 \"\"\"他说：Ciao\"\"\" \n谜底必须是 ###原来今天是肯德基疯狂星期四！！### \n格式类似于： ....\n\n注：有些场景，有些需求很难通过文字指令传递给 AI 什么能做，什么不能做外。即使描述出来了，AI 也不能很好地理解。这时候就可以利用样本（examples）。见“样本进阶技巧5”。\n\n上下文进阶技巧 3\n\n概念对齐\n\n在 ChatGPT 中，一个词语可能有多种不同的含义。甚至对于有些词语，模型无法理解或它的理解与我们的需求不符。这时候我们就需要通过上下文的方式，将我们所需的词语含义加入提示中。\n\n示例：\n\nHuman：Bootstrap 是指就编译器可以自行编译自己的编译器。 实现方法就是这个编译器的作者用这个语言的一些特性来编写编译器并在该编译器中支持这些自己使用到的特性。\nAI：…\n\n样本进阶技巧 1\n\n通过样本来阐述需要输出的格式\n\n前面介绍提示词元素的时候提及过：样本本身可以提供回答内容的示例，一定程度上可以替代“回答期望（回答指示器）”元素。“样本”和“回答期望”2者没有优劣之分，可以组合使用。\n示例：\n\n\n示例一：回答期望\n\n一段文本…\n使用下述格式总结文章观点：\nTopic 1: <topic_name_1>\n- <point_1>\n..\nTopic 2: <topic_name_2>\n- <point_1>\n..\nTopic 10: ..\nAI：\n\n\n示例二：（少）样本\n\n文本A…\nTopic 1: The war in Ukraine\n- The war is taking …\n- The Biden administration…\nTopic 2: The global economy\n..\n一段文本…\n总结文章观点：\nAI：\n\n\n\n样本进阶技巧 2\n\n少样本提示\n\n少样本（Few Shot）提示可以作为一种技术，以启用上下文学习，我们在提示中提供演示以引导模型实现更好的性能。演示作为后续示例的条件，我们希望模型参考示例生成响应。\n与少样本提示对应的还有零样本（Zero Shot）提示及单样本（One Shot）提示（单样本一般归为少样本）。\n虽然大语言模型展示了惊人的零样本能力（参考特定指令模式及指令模板模式等），但在使用零样本设置时，它们在更复杂的任务上仍然表现不佳。\n示例：\n\n\n示例一：零样本提示\n将文本分类为中性、负面或正面。\n文本：我认为这次假期还可以。\n情感：中性\n\n\n示例二：少样本提示\n这太棒了！// Positive\n这太糟糕了！// Negative\n哇，那部电影太棒了！// Positive\n多么可怕的节目！// Negative\n\n\n\n样本进阶技巧 3\n\n零样本提示\n“零样本（Zero Shor）提示在更复杂的任务上表现不佳”，但 Kojima 等人发现，如果在问题的结尾附加“让我们一步步思考。”这几个词，大语言模型能够生成一个回答问题的思维链（Chain of Thought，简称CoT）。从这个思维链中，他们能够提取更准确的答案。\n\n举例：\n\n❌\n如果 John 有 5 个梨子，吃了 2 个，又买了 5 个，然后把 3 个给了他的朋友，他还剩下多少个梨子？\nAI：John 有 8 个梨子。\n\n✅\n如果 John 有 5 个梨子，吃了 2 个，又买了 5 个，然后把 3 个给了他的朋友，他还剩下多少个梨子？\n让我们一步一步地思考。\nAI：John 起初有 5 个梨子。他吃了 2 个梨子，还剩下 3 个梨子。他又买了 5 个梨子，一共有 8 个梨子。他把 3 个梨子给了他的朋友，他现在只剩下 5 个梨子。\n\n样本进阶技巧 4\n\n样本去偏差\n\n根据样本（examples）在提示中的分布和顺序，样本可能会引起模型补全结果的偏差。\n当讨论提示中样例的分布时，我们指的是不同类别样例的数量。\n例如，如果您正在对 微博 进行二元情感分析（积极或消极），并且提供了 3 个积极的推文和 1 个消极的推文作为样例，那么分布比例为 3：1 。由于分布偏向积极推文，因此模型将倾向于预测积极推文。\n\n举例：\n\n❌\nQ: 推文：“多美好的一天！”\nA: 积极\nQ: 推文：“我喜欢牛仔裤口袋”\nA: 积极\nQ: 推文：“我喜欢热口袋饼”\nA: 积极\nQ: 推文：“我讨厌这门课”\nA: 消极\n\n✅\nQ: 推文：“多美好的一天！”\nA: 积极\nQ: 推文：“我喜欢牛仔裤口袋”\nA: 积极\nQ: 推文：“我不喜欢披萨”\nA: 消极\nQ: 推文：“我讨厌这门课”\nA: 消极\n\n样例的顺序也可能导致偏差。例如，一个包含随机排序的样例的提示通常比上述的提示表现更好，因为积极推文和消极推文随机出现在样例中的不同位置。\n\n样本进阶技巧 5\n\nTo do and Not To do\n\n在“上下文进阶技巧2：To do and Not To do”中我们提到过：有些场景，有些需求很难通过文字指令传递给 AI什么能做，什么不能做外。即使描述出来了，AI 也不能很好地理解。这时候就可以利用样本。\n\n举例：\n\n❌\n我需要为一匹马起个超级英雄的名字，为我建议 3 个名字。\nAI：雷电之蹄，慢跑队长，威猛疾驰\n\n✅\n我需要为一个动物马起个超级英雄的名字，为我建议3个名字。\n动物：猫\n名字：利爪队长，毛球特工，惊奇猫猫\n动物：狗\n名字：保护者Ruff，神奇狗狗，狂吠爵士\nAI：\n动物：马\n名字：疾驰守卫，马科复仇者，超级灵驹\n\n❌\n将电影《星球大战》的名称转为 emoji。\n\n✅\n将电影名称转为 emoji。\n回到未来: \uD83D\uDC68\uD83D\uDC74\uD83D\uDE97\uD83D\uDD52\n蝙蝠侠: \uD83E\uDD35\uD83E\uDD87\n变形金刚: \uD83D\uDE97\uD83E\uDD16\n星球大战:\n\n",
+        "category": "文章",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 19,
+        "thumbNum": 1,
+        "favourNum": 0,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1612254411675926529",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-25 15:06:04",
+        "updateTime": "2024-03-26 19:12:23",
+        "user": {
+          "id": "1612254411675926529",
+          "planetCode": "12852",
+          "userName": "聪ζ",
+          "userAvatar": "https://pic.code-nav.cn/user_avatar/1612254411675926529/JbN5T832-1.jpg",
+          "gender": null,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": [],
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": "本科",
+          "graduationYear": 2023,
+          "jobStatus": "已工作",
+          "company": null,
+          "job": "后端",
+          "workYear": null,
+          "direction": "后端",
+          "goal": null,
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 0,
+          "followNum": 0,
+          "followStatus": null,
+          "vipExpireTime": "2024-08-21 21:17:54",
+          "lastLoginTime": null,
+          "createTime": "2023-01-09 09:06:20",
+          "updateTime": "2024-02-28 15:28:55"
+        },
+        "tags": [
+          "文章"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1771089129589792770",
+        "title": "对象拷贝工具",
+        "description": "data工具，实现了对象拷贝 DTO -> VO 只需要实现一个类即可",
+        "content": "# data-utils\n\n## data工具，实现了对象拷贝 DTO -> VO\n\n## 解决的问题\nMapstruct需要安插件!!!!很多云桌面等会很不方便\n\n`org.springframework.beans.BeanUtils`有一个 `copyProperties`的方法\n\n```java\n@Data\n@AllArgsConstructor\n@NoArgsConstructor\npublic class AccountDTO  {\n\n    private Long id;\n    private String username;\n    private String password;\n    private String gender;\n    private String email;\n    private String role;\n    private Date registerTime;\n    private Integer isDelete;\n}\n```\n\n```java\n@Data\npublic class AccountVO {\n    private String username;\n    private String gender;\n    private String role;\n    //男 1 女 0\n    private String genderNum;\n\n    private Integer isDelete;\n}\n```\n\n比如我们有两个类 `DTO`  和 `VO` \n在给前端`VO`的时候,需要把`DTO` 转换成`VO` 我们需要这样写\n遇到`genderNum` `DTO`类里没有的这种情况,我们需要手动`set`的时候，是下面这种写法\n\n```java\nimport com.example.entity.AccountVO;\n\n@Data\npublic class DataTest {\n    @Test\n    void contextLoads1() {\n        AccountDTO accountDTO = new AccountDTO(1L, \"test\", \"123456\", \"男\", \"112@qq.com\", \"user\", new Date(), 1);\n        AccountVO accountVO =  new AccountVO();\n        BeanUtils.copyProperties(accountDTO, accountVO);\n        accountVO.setGender(Objects.equals(accountDTO.getGender(), \"男\") ? \"1\" : \"0\");\n        System.out.println(accountVO);\n    }\n}\n```\n\n有两个缺点:\n\n1. `VO`需要手动new一个出来\n2. 如果`VO`里面有很多字段需要手动`set`的时候,会把代码写的很长\n3. 如果遇到集合里面想要转换, `sonar`还会报不让在循环中创建对象的问题 \n\n## BaseData的作用\n\nBaseData代码(项目里只要有这个就可以)\n\n```java\nimport com.example.common.Constants;\nimport com.example.common.ErrorCode;\nimport com.example.exception.BusinessException;\nimport org.springframework.util.ReflectionUtils;\n\nimport java.lang.reflect.*;\nimport java.util.Arrays;\nimport java.util.function.Consumer;\n\npublic interface BaseData {\n\n    /**\n     * 默认方法，根据传入的Class3类型将当前对象转换为目标对象并执行操作\n     *\n     * @param clazz    目标类\n     * @param consumer 可以写lambda表达式比如\n     *  accountDTO.asTargetObject(AccountVO.class,v->{\n     *      v.setGenderNum(Objects.equals(accountDT0.getGender(),\"男\")?\"1\":\"0\");\n     *          });\n     *  consumer是这段\n     *  v->{\n     *      v.setGenderNum(Objects.equals(accountDT0.getGender(),\"男\")?\"1\":\"0\");\n     *  }\n     */\n    default <V> V asTargetObject(Class<V> clazz, Consumer<V> consumer) {\n//        调用 asTargetObject 方法将当前对象转换为目标对象\n        V v = this.asTargetObject(clazz);\n//        执行传入的Consumer操作\n        consumer.accept(v);\n        return v;\n    }\n\n    /**\n     * 默认方法 将当前对象转换为目标对象\n     *\n     * @param clazz 目标类\n     * @param <V>   目标类类型 如AccountVO\n     * @return 转换完的目标类\n     */\n    default <V> V asTargetObject(Class<V> clazz) {\n        try {\n//            获取目标类的所有字段\n            Field[] declaredFields = clazz.getDeclaredFields();\n//            获取目标类的构造函数\n            Constructor<V> constructor = clazz.getConstructor();\n//            根据构造函数实例化目标对象\n            V v = constructor.newInstance();\n//            遍历目标类的每个字段，并进行转换试值\n            Arrays.stream(declaredFields).forEach(declaredField -> convert(declaredField, v));\n            return v;\n        } catch (ReflectiveOperationException e) {\n//            //捕获ReflectiveOperationException异常，抛出自定义的BusinessException\n            throw new BusinessException(ErrorCode.CAST_OBJECT_ERROR);\n        }\n\n    }\n\n    /**\n     * 默认方法,将字段转换并赋值给目标对象\n     * @param field VO剩余的字段，自定义\n     * @param vo    要转换的VO\n     */\n    default void convert(Field field, Object vo) {\n\n        try {\n//            获取当前对象中与目标字段同名的字段\n            Field source = this.getClass().getDeclaredField(field.getName());\n//            设置字段可访问\n            ReflectionUtils.makeAccessible(field);\n            ReflectionUtils.makeAccessible(source);\n//            获取当前对象中获取字段值的方法和目标对象中设置字段值的方法，并进行转换赋值\n            Method sourceGetter = this.getClass().getMethod(Constants.GET + capitalize(field.getName()));\n            Method targetSetter = vo.getClass().getMethod(Constants.SET + capitalize(field.getName()), field.getType());\n            Object value = sourceGetter.invoke(this);\n            targetSetter.invoke(vo, value);\n        } catch (NoSuchFieldException | InvocationTargetException | IllegalAccessException |\n                 NoSuchMethodException ignored) {\n//              这里ignored 原因是\n//              两个类的字段数量不一样的时候，会报 java.lang.NoSuchFieldException\n//              但是多出来的字段我们是可以处理的\n        }\n    }\n\n    /**\n     * 默认方法,将字符串首字母大写\n     * @param str   比如字段名 name\n     * @return 返回 Name\n     */\n    default String capitalize(String str) {\n        if (str == null || str.isEmpty()) {\n            return str;\n        }\n        return Character.toUpperCase(str.charAt(0)) + str.substring(1);\n    }\n}\n\n```\n\n1. 实现对象深拷贝\n\n```java\n@Data\npublic class DataTest {\n    @Test\n    void contextLoads1() {\n        AccountDTO accountDTO = new AccountDTO(1L,\"test\",\"123456\",\"男\",\"112@qq.com\",\"user\",new Date(),1);\n        AccountVO accountVO = accountDTO.asTargetObject(AccountVO.class,v->{\n            v.setGenderNum(Objects.equals(accountDTO.getGender(), \"男\") ? \"1\" : \"0\");\n        });\n        System.out.println(accountVO);\n    }\n}\n```\n\n2. 实现对象Collection 深拷贝(List Set ...)\n\n```java\n@Data\npublic class DataTest {\n    @Test\n    void contextLoads2() {\n        AccountDTO accountDTO = new AccountDTO(1L,\"test\",\"123456\",\"男\",\"112@qq.com\",\"user\",new Date(),0);\n        AccountDTO accountDTO2 = new AccountDTO(2L,\"test2\",\"123456\",\"女\",\"112@qq.com\",\"admin\",new Date(),1);\n        List<AccountDTO> accountDTOList = new ArrayList<>();\n        accountDTOList.add(accountDTO);\n        accountDTOList.add(accountDTO2);\n        List<AccountVO> list = accountDTOList.stream().map(source -> source.asTargetObject(AccountVO.class, v-> {\n            v.setGenderNum(Objects.equals(source.getGender(), \"男\") ? \"1\" : \"0\");\n        })).collect(Collectors.toList());\n        list.forEach(System.out::println);\n    }\n\n    @Test\n    void contextLoads3() {\n        AccountDTO accountDTO = new AccountDTO(1L,\"test\",\"123456\",\"男\",\"112@qq.com\",\"user\",new Date(),1);\n        AccountDTO accountDTO2 = new AccountDTO(2L,\"test2\",\"123456\",\"女\",\"112@qq.com\",\"admin\",new Date(),0);\n        Set<AccountDTO> accountDTOSet = new HashSet<>();\n        accountDTOSet.add(accountDTO);\n        accountDTOSet.add(accountDTO2);\n        Set<AccountVO> set = accountDTOSet.stream().map(source -> source.asTargetObject(AccountVO.class, v-> {\n            v.setGenderNum(Objects.equals(source.getGender(), \"男\") ? \"1\" : \"0\");\n        })).collect(Collectors.toSet());\n        set.forEach(System.out::println);\n    }\n}\n```\n\n## 实现步骤\n\n    1. dto 实现 BaseData接口\n\n```java\n@Data\n@AllArgsConstructor\n@NoArgsConstructor\npublic class AccountDTO implements BaseData {\n\n    private Long id;\n    private String username;\n    private String password;\n    private String gender;\n    private String email;\n    private String role;\n    private Date registerTime;\n    private Integer isDelete;\n}\n```\n\n    2. dto.asViewObject(Target.class);\n    3. 如果 Target 还有其他字段 也可以自定义，例如测试用例中的genderNum(只是简单举的例子，按照项目实际来)\n    4. `isDelete` 这种is开头的也支持\n       1. 如果有问题,看下lombok版本是否有问题 此项目用的版本是 1.18.28 没问题\n       2. 如果没用lombok 手动加上getIsDelete() 用这个格式就可以了\n\n\n## <font color=red>注意</font>\n\n<font color=red>两个类 相同的字段名的字段类型 必须完全一样!!!</font>\n\n",
+        "category": "文章",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 24,
+        "thumbNum": 1,
+        "favourNum": 0,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1615892146731089921",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-22 16:18:48",
+        "updateTime": "2024-03-26 16:43:30",
+        "user": {
+          "id": "1615892146731089921",
+          "planetCode": "13461",
+          "userName": "13461-子仪",
+          "userAvatar": "https://thirdwx.qlogo.cn/mmopen/vi_32/zFdcBj01aZ3xxvwN0gOicnWfOJohiczicoMhS0Zq06DDWvXibpexVC3au0IhNXILqK1RxUJR8Bic4AubH1JhHwVfVrA/132",
+          "gender": 1,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": [],
+          "place": "沈阳",
+          "birthday": "1997-11-25",
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": null,
+          "jobStatus": null,
+          "company": null,
+          "job": null,
+          "workYear": null,
+          "direction": "后端",
+          "goal": "社招",
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 6,
+          "followNum": 0,
+          "followStatus": null,
+          "vipExpireTime": "2024-09-07 09:07:39",
+          "lastLoginTime": null,
+          "createTime": "2023-01-19 10:01:24",
+          "updateTime": "2024-01-05 09:16:02"
+        },
+        "tags": [
+          "文章",
+          "Java",
+          "后端"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1771051597640589313",
+        "title": "什么是接口的幂等性，如何保证接口的幂等性？",
+        "description": "什么是接口的幂等性，如何保证接口的幂等性？",
+        "content": "# 什么是接口的幂等性，如何保证接口的幂等性？\n\n\n\n## 1.前言☕\n\n大家好，我是Leo哥\uD83E\uDEE3\uD83E\uDEE3\uD83E\uDEE3，分享一下关于接口的幂等性的博客。\n\n## 2.什么是幂等性\n\n幂等是一个数学与计算机学概念，在数学中某一元运算为幂等时，其作用在任一元素两次后会和其作用一次的结果相同。在计算机中编程中，一个幂等操作的特点是其任意多次执行所产生的影响均与一次执行的影响相同。幂等函数或幂等方法是指可以使用相同参数重复执行，并能获得相同结果的函数。这些函数不会影响系统状态，也不用担心重复执行会对系统造成改变。\n\n\n\n## 3.什么是接口幂等性\n\n所谓接口幂等性，就是一次和多次请求某一个资源对于资源本身应该具有同样的结果。\n\n接口的 **幂等性（Idempotence）** 是指`一个操作在执行一次和多次执行时，其结果是一样的`。换句话说，无论这个操作被执行多少次，它对系统状态的影响都是相同的。幂等性是分布式系统中的一个重要概念，它有助于确保系统的健壮性和一致性。\n\n在网络通信和 API 设计中，幂等性尤为重要，因为它可以防止由于网络重传、客户端或服务器端的重复请求等问题导致的数据不一致。例如，一个幂等的 HTTP 请求（如 GET 或 PUT 请求）在多次发送时，服务器应该能够正确处理，确保不会对资源造成意外的影响。\n\n\n\n\n\n## 4.应用场景\n\n不知道以下场景，朋友们是否遇到过：\n\n- **前端重复提交表单：** 在填写一些表格时候，用户填写完成提交，很多时候会因网络波动没有及时对用户做出提交成功响应，致使用户认为没有成功提交，然后一直点提交按钮，这时就会发生重复提交表单请求。\n- **用户恶意进行刷单：** 例如在实现用户投票这种功能时，如果用户针对一个用户进行重复提交投票，这样会导致接口接收到用户重复提交的投票信息，这样会使投票结果与事实严重不符。\n- **接口超时重复提交：** 很多时候 HTTP 客户端工具都默认开启超时重试的机制，尤其是第三方调用接口时候，为了防止网络波动超时等造成的请求失败，都会添加重试机制，导致一个请求提交多次。\n- **消息进行重复消费：** 当使用 MQ 消息中间件时候，如果发生消息中间件出现错误未及时提交消费信息，导致发生重复消费。\n\n没错，这些都是幂等性问题。\n\n`接口幂等性`是指用户对于同一操作发起的一次请求或者多次请求的结果是一致的，不会因为多次点击而产生了副作用。\n\n这类问题多发于接口的：\n\n- `insert`操作，这种情况下多次请求，可能会产生重复数据。\n- `update`操作，如果只是单纯的更新数据，比如：`update user set status=1 where id=1`，是没有问题的。如果还有计算，比如：`update user set status=status+1 where id=1`，这种情况下多次请求，可能会导致数据错误。\n\n## 5.解决方案\n\n### 5.1 inset之前先select\n\n通常情况下，在保存数据的接口中，我们为了防止产生重复数据，一般会在`insert`前，先根据`name`字段`select`一下数据。如果该数据已存在，则执行`update`操作，如果不存在，才执行  `insert`操作。\n\n![image-20240202095611459](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402020956543.png)\n\n\n\n\n\n### 5.2 数据库唯一索引\n\n大多数情况下，我们为了防止数据重复提交，我们都会在表中添加唯一索引，这个一个非常简单而且有奇效的方案。\n\n```sql\nalter table `order` add UNIQUE KEY `t_code` (`code`);\n```\n\n加了唯一索引之后，第一次请求数据可以插入成功。但后面的相同请求，插入数据时会报`Duplicate entry '002' for key 'order.t_code`异常，表示唯一索引有冲突。\n\n**具体流程图如下：**\n\n![image-20240202101415975](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021014043.png)\n\n\n\n### 5.3 Token机制\n\n针对客户端连续点击或者调用方的超时重试等情况，例如提交订单，此种操作就可以用 Token 的机制实现防止重复提交。简单的说就是调用方在调用接口的时候先向后端请求一个全局 ID（Token），请求的时候携带这个全局 ID 一起请求**（Token 最好将其放到 Headers 中）**，后端需要对这个 Token 作为 Key，用户信息作为 Value 到 Redis 中进行键值内容校验，如果 Key 存在且 Value 匹配就执行删除命令，然后正常执行后面的业务逻辑。如果不存在对应的 Key 或 Value 不匹配就返回重复执行的错误信息，这样来保证幂等操作。\n\n该方案跟之前的所有方案都有点不一样，需要两次请求才能完成一次业务操作。\n\n1. 第一次请求获取`token`\n2. 第二次请求带着这个`token`，完成业务操作。\n\n**具体流程图如下：**\n\n\n\n![image-20240202095841563](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402020958634.png)\n\n\n\n### 5.4 悲观锁机制\n\n比如某银行有个转账场景，用户A手里有200块钱，想转出100元，正常情况下，用户A转账之后只剩下了100元，SQL如下：\n\n```sql\nupdate user amount = amount-100 where id=888;\n```\n\n但是实际情况下，并非如此，如果有个相同的请求进来，用户A的账户就会一直扣减，直到变成负数。这种情况，用户A直接哭死，在业务场景中也是不允许出现的。\n\n通常情况下通过如下sql锁住单行数据：\n\n```sql\nselect * from user id=888 for update;\n```\n\n**具体步骤：**\n\n1. 多个请求同时根据id查询用户信息。\n2. 判断余额是否不足100，如果余额不足，则直接返回余额不足。\n3. 如果余额充足，则通过for update再次查询用户信息，并且尝试获取锁。\n4. 只有第一个请求能获取到行锁，其余没有获取锁的请求，则等待下一次获取锁的机会。\n5. 第一个请求获取到锁之后，判断余额是否不足100，如果余额足够，则进行update操作。\n6. 如果余额不足，说明是重复请求，则直接返回成功。\n\n悲观锁需要在同一个事务操作过程中锁住一行数据，如果事务耗时比较长，会造成大量的请求等待，影响接口性能。\n\n此外，每次请求接口很难保证都有相同的返回值，所以不适合幂等性设计场景，但是在防重场景中是可以的使用的。\n\n\n\n### 5.5 乐观锁机制\n\n因为悲观锁是比较消耗的性能的操作，那么我们为了提高接口性能，完全可以使用乐观锁。需要再表中添加一个version字段。\n\n比如：\n\n```sql\nalter table user add version int（2）；\n```\n\n每当我们更新数据的时候，需要对我们的版本号+1\n\n```sql\nupdate user set amount = amount+100,version=version+1 where id = 888 and version =1  \n```\n\n更新数据的同时`version+1`，然后判断本次`update`操作的影响行数，如果大于0，则说明本次更新成功，如果等于0，则说明本次更新没有让数据变更。\n\n等到下一个请求过来的时候，依然回去执行这行SQL，此时发现，根本不可能满足，`version= 1`  这个条件，因为`version`值已经修改了，那么前面必定已经成功过一次，后面都是重复的请求。\n\n**流程图如下：**\n\n![image-20240202103825041](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021038083.png)\n\n**具体步骤：**\n\n1. 先根据id查询用户信息，包含version字段\n2. 根据id和version字段值作为where条件的参数，更新用户信息，同时version+1\n3. 判断操作影响行数，如果影响1行，则说明是一次请求，可以做其他数据操作。\n4. 如果影响0行，说明是重复请求，则直接返回成功。\n\n### 5.6 建防重表\n\n有时候我们的表中需要一些重复数据，只有一些特殊场景才不需要重复数据，此时我们上面的唯一索引方案可能就不太行了。\n\n这时候，直接在表中加唯一索引，显然是不太合适的。\n\n针对这种情况，我们可以通过`建防重表`来解决问题。\n\n简单来说就是我们再单独建立一张表，只需要含有id和唯一索引，当然唯一索引可以是多个字段比如：name、code等组合起来的唯一标识\n\n**流程图如下：**\n![image-20240202104525417](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021045459.png)\n\n\n\n\n\n**具体步骤：**\n\n1. 用户通过浏览器发起请求，服务端收集数据。\n2. 将该数据插入mysql防重表。\n3. 判断是否执行成功，如果成功，则做mysql其他的数据操作（可能还有其他的业务逻辑）。\n4. 如果执行失败，捕获唯一索引冲突异常，直接返回成功。\n\n\n\n## 6.代码实践\n\n以上我们都是给出了一些大概的解决方案跟思路，接下来Leo哥大家以Token机制为例，用代码实现如果解决接口的幂等性。\n\n首先我们来回顾一下Token机制的整个流程。\n\n![image-20240202095841563](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021047167.png)\n\n下面开始直接上代码。\n\n首先准备一个springboot工程项目，只需要添加两个依赖即可。\n\n![image-20240202104822062](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021048090.png)\n\n\n\n然后开始编写Redis工具类跟一个简单的Token工具类。\n\n**RedisService**\n\n```java\npackage org.javatop.idempotent.token;\n\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.data.redis.core.RedisTemplate;\nimport org.springframework.data.redis.core.ValueOperations;\nimport org.springframework.stereotype.Component;\n\nimport java.util.concurrent.TimeUnit;\n\n/**\n * @author : Leo\n * @version 1.0\n * @date 2024-02-01 21:03\n * @description :\n */\n@Component\npublic class RedisService {\n\n    @Autowired\n    private RedisTemplate redisTemplate;\n\n    public boolean setEx(String key, Object value, Long expireTime) {\n        boolean result = false;\n        try {\n            ValueOperations ops = redisTemplate.opsForValue();\n            ops.set(key, value);\n            redisTemplate.expire(key, expireTime, TimeUnit.SECONDS);\n            result = true;\n        } catch (Exception e) {\n            e.printStackTrace();\n        }\n        return result;\n    }\n\n    /**\n     * 判断key是否存在\n     * @param key key\n     * @return\n     */\n    public boolean exists(String key) {\n        return Boolean.TRUE.equals(redisTemplate.hasKey(key));\n    }\n\n    /**\n     * 删除key\n     * @param key key\n     * @return\n     */\n    public boolean remove(String key) {\n        if (exists(key)) {\n            return Boolean.TRUE.equals(redisTemplate.delete(key));\n        }\n        return false;\n    }\n}\n```\n\n\n\n**TokenService**\n\n主要是生成一个全局唯一不重复的Token，以及前端请求过来被拦截后需要检验token的方法。\n\n```java\npackage org.javatop.idempotent.token;\n\nimport io.micrometer.common.util.StringUtils;\nimport jakarta.servlet.http.HttpServletRequest;\nimport org.javatop.idempotent.exception.IdempotentException;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.stereotype.Component;\n\nimport java.util.UUID;\n\n/**\n * @author : Leo\n * @version 1.0\n * @date 2024-02-01 21:01\n * @description :\n */\n@Component\npublic class TokenService {\n\n    @Autowired\n    RedisService redisService;\n\n    public String createToken() {\n        String uuid = UUID.randomUUID().toString();\n        redisService.setEx(uuid, uuid, 10000L);\n        return uuid;\n    }\n\n    public boolean checkToken(HttpServletRequest request) throws IdempotentException {\n        String token = request.getHeader(\"token\");\n        if (StringUtils.isEmpty(token)) {\n            token = request.getParameter(\"token\");\n            if (StringUtils.isEmpty(token)) {\n                throw new IdempotentException(\"token 不存在\");\n            }\n        }\n        if (!redisService.exists(token)) {\n            throw new IdempotentException(\"重复的操作\");\n        }\n        boolean remove = redisService.remove(token);\n        if (!remove) {\n            throw new IdempotentException(\"重复的操作\");\n        }\n        return true;\n    }\n}\n```\n\n\n\n**自定义幂等注解**\n\n我们自定义一个幂等注解，来对我们想要幂等性一致的接口进行标识。\n\n```java\n/**\n * @author : Leo\n * @version 1.0\n * @date 2024-02-01 21:17\n * @description : 幂等注解\n */\n@Target(ElementType.METHOD)\n@Retention(RetentionPolicy.RUNTIME)\npublic @interface AutoIdempotent {\n}\n```\n\n\n\n**添加拦截器**\n\n在拦截器中，我们解析出所有的请求，标注有幂等注解的请求，我们去检验他的token，然后来决定下一步操作。\n\n```java\npackage org.javatop.idempotent.interceptor;\n\nimport jakarta.servlet.http.HttpServletRequest;\nimport jakarta.servlet.http.HttpServletResponse;\nimport org.javatop.idempotent.annotation.AutoIdempotent;\nimport org.javatop.idempotent.exception.IdempotentException;\nimport org.javatop.idempotent.token.TokenService;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.context.annotation.Configuration;\nimport org.springframework.stereotype.Component;\nimport org.springframework.web.method.HandlerMethod;\nimport org.springframework.web.servlet.HandlerInterceptor;\nimport org.springframework.web.servlet.ModelAndView;\n\n/**\n * @author : Leo\n * @version 1.0\n * @date 2024-02-01 21:14\n * @description :\n */\n@Component\npublic class IdempotentInterceptor implements HandlerInterceptor {\n    @Autowired\n    TokenService tokenService;\n\n    @Override\n    public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws Exception {\n        if (!(handler instanceof HandlerMethod)) {\n            return true;\n        }\n        HandlerMethod handlerMethod = (HandlerMethod) handler;\n        AutoIdempotent idempotent = handlerMethod.getMethod().getAnnotation(AutoIdempotent.class);\n        if (idempotent != null) {\n            try {\n                return tokenService.checkToken(request);\n            } catch (IdempotentException e) {\n                throw e;\n            }\n        }\n        return true;\n    }\n}\n```\n\n\n\n**测试**\n\n最后编写接口进行测试。\n\n![](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021103234.png)\n\n\n\n首先生成一个Token,然后把这个token放到hello接口的请求头上面。\n\n![image-20240202110510677](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021105712.png)\n\n\n\n可以看到，第一次可以正常访问接口\n\n![image-20240202110612723](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021106767.png)\n\n但当你第二次访问该接口的时候，已经提示你操作重复了。因为在我们第一次访问接口之后，就把Redis中的token删除了。\n\n![image-20240202110656581](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/LeoPic202402021106613.png)\n\n\n\n## 7.总结\n\n以上便是本文的全部内容，本人才疏学浅，文章有什么错误的地方，欢迎大佬们批评指正！我是**Leo**，一个在互联网行业的小白，立志成为更好的自己。\n",
+        "category": "文章",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 18,
+        "thumbNum": 1,
+        "favourNum": 1,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1768274766864605186",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-22 13:49:40",
+        "updateTime": "2024-03-26 16:41:14",
+        "user": {
+          "id": "1768274766864605186",
+          "planetCode": "12644",
+          "userName": "无名小卒",
+          "userAvatar": "https://pic.code-nav.cn/user_avatar/1768274766864605186/qzSxxhhE-Leo.jpg",
+          "gender": 1,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": [
+            "Java"
+          ],
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": 1,
+          "jobStatus": "已工作",
+          "company": null,
+          "job": "后端",
+          "workYear": 1,
+          "direction": "后端",
+          "goal": "社招",
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 0,
+          "followNum": 3,
+          "followStatus": null,
+          "vipExpireTime": "2025-03-14 21:53:56",
+          "lastLoginTime": null,
+          "createTime": "2024-03-14 21:55:32",
+          "updateTime": "2024-03-19 16:46:52"
+        },
+        "tags": [
+          "文章",
+          "Java"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1770761014644662274",
+        "title": "Hexo+Github+Netlify博客搭建教程",
+        "description": "Hexo+Github+Netlify博客搭建教程",
+        "content": "# Hexo+Github+Netlify博客搭建教程\n\n> 大家好，我是Leo\uD83E\uDEE3\uD83E\uDEE3\uD83E\uDEE3，前段时间有朋友问了一些关于博客搭建的相关问题，考虑到我之前发的那一篇博客搭建教程比较久远了，所以最近打算重新\n>\n> 重构一下博客搭建教程，以我现在最新的博客站点为例，带大家从零开始搭建Hexo博客，记录属于你的自己的故事吧，\n>\n> 好了，话不多说让我们开始吧\uD83D\uDE0E\uD83D\uDE0E\uD83D\uDE0E。\n\n\n\n\n\n\n\n## 1.前言\n\n**博客初步的页面效果可以看一下我的博客**：[Leo](https://manamn.space/)，欢迎大家支持访问。\n\n![image-20231013213039300](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132130425.png)\n\n本博客基于[Hexo](https://hexo.io/zh-cn/)，所以首先要了解一下我们搭建博客所要用到的框架。**Hexo**是高效的静态网站生成框架，它基于**Node.js**快速，简单且功能强大，是搭建博客的首选框架。大家可以进入[hexo](https://hexo.io/zh-cn/)官网进行详细查看，因为**Hexo**的创建者是台湾人，对中文的支持很友好，可以选择中文进行查看。通过 **Hexo**，你可以直接使用**Markdown**语法来撰写博客。相信很多小伙伴写工程都写过**README.md** 文件吧，对，就是这个格式的！写完后只需两三条命令即可将生成的网页上传到**github**或者**coding**等代码管理托管平台，然后别人就可以浏览你的博客网页啦。是不是很简单？你无需关心网页源代码的具体生成细节，只需要用心写好你的博客文章内容就行了。\n\n**教程大致分三个部分**，\n\n- 第一部分：**Hexo**的初级搭建还有部署到 **Github page**上，以及个人域名的绑定。\n- 第二部分：**Hexo**的基本配置，更换主题，实现多终端工作，以及在**coding page** 部署实现国内外分流\n- 第三部分：**Hexo**添加各种功能，包括搜索的**SEO**，阅读量统计，访问量统计和评论系统等，并在国外**netlify**进行托管。\n\n\n\n## 2.Hexo搭建\n\n### 2.1 安装nodejs\n\n**Hexo**是基于**node.js**编写的，所以需要安装一下**node.js**和里面的**npm**工具。\n\n**windows：**下载稳定版或者最新版都可以[Node.js](http://nodejs.cn/download/)，安装选项全部默认，一路点击**Next**。\n最后安装好之后，按Win+R打开命令提示符，输入**node -v**和**npm -v**，如果出现版本号，那么就安装成功了。\n\n建议直接到[nodejs官网](http://nodejs.cn/)去下载，如下所示:\n\n![image-20231013214352496](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132143658.png)\n\n\n\n然后解压到你指定的文件夹即可，比如我解压到我系统的 D:\\software\\nodejs 目录下了，如图:\n\n![image-20231013214157355](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132141450.png)\n\n\n\n这样我们在所有用户下，都可以使用**npm**，也可以使用**npm**安装的包的命令。成功的将**nodejs**安装并配置到全局环境下。\n\n安装完后，打开命令行终端，输入:\n\n```bash\nnode -v\nnpm -v\n```\n\n检查一下有没有安装成功\n\n![image-20231013214435098](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132144158.png)\n\n**看到以上版本号即使安装成功！**\n\n\n\n### 2.2 添加国内镜像源\n\n如果没有梯子的话，可以使用阿里的国内镜像进行加速。\n\n```bash\nnpm config set registry https://registry.npm.taobao.org\n```\n\n\n\n### 2.3 安装Hexo\n\n前面**git**和**nodejs**安装好后，就可以安装**Hexo**了，你可以先创建一个文件夹Hexo**(这里名字随意)**，用来存放自己的博客文件，然后cd到这个文件夹下（或者在这个文件夹下直接右键**git bash**打开）。\n\n比如我的博客文件都存放在D:\\Hexo目录下。\n\n在该目录下右键点击**Git Bash Here**，打开**Git**的控制台窗口，以后我们所有的操作都在**Git**控制台进行，就不用**Windows**自带的cmd了。\n\n定位到该目录下，输入以下命令安装**Hexo**。可能会有几个报错，无视它就行。\n\n```bash\nnpm install -g hexo-cli\n```\n\n安装完后输入以下 验证是否安装成功。\n\n```bash\nhexo -v\n```\n\n![image-20231013230819610](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132308690.png)\n\n看到以上内容，至此Hexo就安装完了。\n\n接下来初始化一下**Hexo**,即初始化我们的网站，进入我们主题根目录**Hexo**，输入**hexo init**初始化文件夹\n\n```bash\nhexo init \n```\n\n这个Hexo可以自己取什么名字都行，然后，接着输入**npm install**安装必备的组件。\n\n这样本地的网站配置也弄好啦，输入**hexo g**生成静态网页，然è¾å¥**hexo s**æå¼æ¬å°æå¡å¨ï¼\n\n\n\n```bash\nhexo g\nhexo server(æèç®å:hexo sï¼\n```\n\n\n\n![å¨è¿éæå¥å¾çæè¿°](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/cisyam/202308281839398.png)\n\n\næctrl+cå³é­æ¬å°æå¡å¨ã\n\n\n\n### 2.4 æ³¨åGithubè´¦å·åå»ºä¸ªäººä»åº\n\næ¥ä¸æ¥å°±å»æ³¨åä¸ä¸ª**github**è´¦å·ï¼ç¨æ¥å­æ¾æä»¬çç½ç«ãå¤§å¤æ°å°ä¼ä¼´åºè¯¥é½æäºå§ï¼ä½ä¸ºä¸ä¸ªåæ ¼çç¨åºç¿(åª)è¿æ¯è¦æä¸ä¸ªçã\n\næå¼https://github.com/ï¼æ°å»ºä¸ä¸ªé¡¹ç®ä»åº `New repository`ï¼å¦ä¸æç¤ºï¼\n\n![image-20231013232537693](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132325793.png)\n\n\n\nè¦åå»ºä¸ä¸ªåä½ ç¨æ·åç¸åçä»åºï¼åé¢å http://github.ioï¼åªæè¿æ ·ï¼å°æ¥è¦é¨ç½²å°GitHub pageçæ¶åï¼æä¼è¢«è¯å«ï¼\n\nä¹å°±æ¯ http://xxxx.github.ioï¼å¶ä¸­xxxå°±æ¯ä½ æ³¨åGitHubçç¨æ·åãä¾å¦æçï¼[http://gaoziman.github.io](http://gaoziman.github.io/)\n\n\n\n### 2.5 çæSSHæ·»å å°GitHub\n\nçæSSHæ·»å å° **GitHub**ï¼è¿æ¥**Github**ä¸æ¬å°ã\nå³é®æå¼**git bash**ï¼ç¶åè¾å¥ä¸é¢å½ä»¤ï¼\n\n```bash\ngit config --global user.name \"yourname\"\ngit config --global user.email \"youremail\"\n```\n\næ³¨æï¼ç¬¬ä¸æ¬¡ä½¿ç¨gitåéè¦å°ç¨æ·ååé®ç®±è¿è¡åå§å\n\nè¿éç`yourname`è¾å¥ä½ ç`GitHub`ç¨æ·åï¼`youremail`è¾å¥ä½ `GitHub`çé®ç®±ãè¿æ ·`GitHub`æè½ç¥éä½ æ¯ä¸æ¯å¯¹åºå®çè´¦æ·ãä¾å¦æçï¼\n\n```bash\ngit config --global user.name \"gaiolan\"\ngit config --global user.email \"2942892675@qq.com\"\n```\n\nå¯ä»¥ç¨ä»¥ä¸ä¸¤æ¡ï¼æ£æ¥ä¸ä¸ä½ ææ²¡æè¾å¯¹\n\n```bash\ngit config user.name\ngit config user.email\n```\n\nç¶ååå»º**SSH**,ä¸è·¯åè½¦\n\n**SSH**ï¼ç®åæ¥è®²ï¼å°±æ¯ä¸ä¸ªç§é¥ï¼å¶ä¸­ï¼**id_rsa**æ¯ä½ è¿å°çµèçç§äººç§é¥ï¼ä¸è½ç»å«äººççï¼<font color=\"blue\">id_rsa.pub</font> æ¯å¬å±ç§é¥ï¼å¯ä»¥éä¾¿ç»å«äººçãæè¿ä¸ªå¬é¥æ¾\n\nå¨**GitHub**ä¸ï¼è¿æ ·å½ä½ é¾æ¥**GitHub**èªå·±çè´¦æ·æ¶ï¼å®å°±ä¼æ ¹æ®å¬é¥å¹éä½ çç§é¥ï¼å½è½å¤ç¸äºå¹éæ¶ï¼æè½å¤é¡ºå©çéè¿**Git**ä¸ä¼ ä½ çæä»¶å°**GitHub**\n\nä¸ã\n\n```bash\nssh-keygen -t rsa -C \"youremail\"\n```\n\n\n\nè¿ä¸ªæ¶åå®ä¼åè¯ä½ å·²ç»çæäº**.ssh**çæä»¶å¤¹ãå¨ä½ ççµèä¸­æ¾å°è¿ä¸ªæä»¶å¤¹ãæè**git bash**ä¸­è¾å¥\n\n```bash\ncat ~/.ssh/id_rsa.pub\n```\n\nå°è¾åºçåå®¹å¤å¶å°æ¡ä¸­ï¼ç¹å»ç¡®å®ä¿å­ã\n\næå¼[github](http://github.com/)ï¼å¨å¤´åä¸é¢ç¹å»`settings`ï¼åç¹å»`SSH and GPG keys`ï¼æ°å»ºä¸ä¸ª`SSH`ï¼åå­éä¾¿åä¸ä¸ªé½å¯ä»¥ï¼æä½ ç`id_rsa.pub`éé¢çä¿¡æ¯å¤å¶è¿å»ãå¦å¾ï¼\n\n![å¨è¿éæå¥å¾çæè¿°](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/cisyam/202308281840521.png)\n\nå¨**git bash**è¾å¥ä»¥ä¸å½ä»¤ã\n\n```bash\nssh -T git@github.com\n```\n\nå¦æå¦ä¸å¾æç¤ºï¼åºç°ä½ çç¨æ·åï¼é£å°±æåäºã\n\n![image-20220508145723991](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/cisyam/202308281840964.png)\n\n\n\n### 2.6 å°Hexoé¨ç½²å°GitHub\n\nè¿ä¸æ­¥ï¼æä»¬å°±å¯ä»¥å°**Hexo**å**GitHub**å³èèµ·æ¥ï¼ä¹å°±æ¯å°hexoçæçæç« é¨ç½²å°GitHubä¸ï¼æå¼åå®¢æ ¹ç®å½ä¸ç **_config.yml**æä»¶ï¼è¿æ¯åå®¢çéç½®æä»¶ï¼å¨è¿éä½ å¯ä»¥ä¿®æ¹ä¸åå®¢éç½®ç¸å³çåç§ä¿¡æ¯ã\n\nä¿®æ¹æåä¸è¡çéç½®ï¼\n\n```yml\ndeploy:\n  type: git\n  repository: https://github.com/gaoziman/gaoziman.github.io.git\n  branch: master\n```\n\nrepositoryä¿®æ¹ä¸ºä½ èªå·±ç**github**é¡¹ç®å°åå³å¯å°±æ¯é¨ç½²æ¶ååè¯å·¥å·ï¼å°çæç½é¡µéè¿ **Git** æ¹å¼ä¸ä¼ å°ä½ å¯¹åºçé¾æ¥ä»åºä¸­ã\n\nè¿ä¸ªæ¶åéè¦åå®è£**deploy-git** ï¼ä¹å°±æ¯é¨ç½²çå½ä»¤,è¿æ ·ä½ æè½ç¨å½ä»¤é¨ç½²å°**GitHub**ã\n\n```bash\nnpm install hexo-deployer-git --save\n```\n\nç¶åHexoä¸è¿å³å¯å°æä»¬æ¬å°çä»£ç ä¸ä¼ å°Githubä»åºäºã\n\n```bash\nhexo clean\nhexo generate\nhexo deploy\n```\n\n\n\nå¶ä¸­ **hexo clean**æ¸é¤äºä½ ä¹åçæçä¸è¥¿ï¼ä¹å¯ä»¥ä¸å ã **hexo generate**é¡¾åæä¹ï¼çæéææç« ï¼å¯ä»¥ç¨ **hexo g**ç¼©å ï¼**hexo deploy**é¨ç½²æç« ï¼å¯ä»¥ç¨ **hexo d** ç¼©å\n\n> æ³¨ædeployæ¶å¯è½è¦ä½ è¾å¥**username**å **password**ã\n\n\n\n\n### 2.7 è®¾ç½®ä¸ªäººåå\n\nç°å¨ä½ çä¸ªäººç½ç«çå°åæ¯yourname.github.ioï¼å¦æè§å¾è¿ä¸ªç½åé¼æ ¼ä¸å¤ªå¤ï¼è¿å°±éè¦ä½ è®¾ç½®ä¸ªäººååäºãä½æ¯éè¦è±é±ã\n\n> ä¸è¿ï¼è¿ä¸æ­¥ä¸æ¯å¿è¦çï¼å¦æç®åè¿ä¸æ³ä¹°ååå¯ä»¥åè·³è¿ï¼ç»§ç»­çåé¢çï¼ä»¥åæ³ä¹°ååäºå¨è¿çè¿å\n\né¦åä½ å¾è´­ä¹°ä¸ä¸ªä¸å±ååï¼`xx`äºé½è½ä¹°ï¼çä½ ä¸ªäººåå¥½äºã\n\nè¿ç¯ä»¥é¿éäºä¸ºä¾ï¼é¿éäºå®ç½è´­ä¹°ï¼\n\n![image-20220508150329881](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/cisyam/202308281840349.png)\n\nç¶åå®åè®¤è¯åè¿å¥é¿éäºæ§å¶å°ï¼ç¹äºè§£æè¿å»ï¼æ¾å°ä½ åä¹°çååï¼ç¹è¿å»æ·»å ä¸¤æ¡è§£æè®°å½ï¼å¦ä¸å¾æç¤ºï¼\n\n![å¨è¿éæå¥å¾çæè¿°](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/cisyam/202308281840989.png)\n\n\n\n\nç¶åæå¼ä½ ç**github**åå®¢é¡¹ç®ï¼ç¹å»**settings**ï¼æå°ä¸é¢**Custom domain**å¤ï¼å¡«ä¸ä½ èªå·±çååï¼ä¿å­ï¼\n\n![image-20231013233707484](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132337570.png)\n\n\nè¿æ¶åä½ çé¡¹ç®æ ¹ç®å½åºè¯¥ä¼åºç°ä¸ä¸ªåä¸º**CNAME**çæä»¶äºãå¦ææ²¡æçè¯ï¼æå¼ä½ æ¬å°åå®¢**/source**ç®å½ï¼æçæ¯**D:\\Hexo\\source**ï¼æ°å»º**CNAME**æä»¶ï¼æ³¨ææ²¡æåç¼ãç¶åå¨éé¢åä¸ä½ çååï¼ä¿å­ãæåè¿è¡**hexo gãhexo d**ä¸ä¼ å°**Github**ã\n\nè¿ä¸äºå¤ä¹ï¼åæå¼ä½ çæµè§å¨ï¼è¾å¥ä½ èªå·±çä¸å±ååï¼å°±å¯ä»¥çå°æ­å»ºçç½ç«å¦ï¼\n\n\n\n### 2.8 åæç« å¹¶åå¸æç« \n\né¦åå¨åå®¢æ ¹ç®å½ä¸å³é®æå¼**git bash**ï¼ç¶åè¾å¥hexo new post \"æçç¬¬ä¸ç¯åå®¢\"ï¼æ°å»ºä¸ç¯æç« ã\n\nç¶åæå¼**D:\\Hexo\\source\\_posts**çç®å½ï¼å¯ä»¥åç°ä¸é¢å¤äºä¸ä¸ªæä»¶å¤¹åä¸ä¸ª.mdæä»¶ï¼ä¸ä¸ªç¨æ¥å­æ¾ä½ çå¾çç­æ°æ®ï¼å¦ä¸ä¸ªå°±æ¯ä½ çæç« æä»¶å¦ã\nä½ å¯ä»¥ä¼ç´æ¥å¨webstromæèVSCodeéé¢ç¼å**markdown**æä»¶ï¼å¯ä»¥å®æ¶é¢è§ï¼ä¹å¯ä»¥ç¨ç¨å¶ä»ç¼åmdæä»¶çè½¯ä»¶çå·¥å·ç¼å---->è¿éå¼ºçæ¨è**typora**ã\nç¼åå®markdownæä»¶åï¼æ ¹ç®å½ä¸è¾å¥hexo gçæéæç½é¡µï¼ç¶åè¾å¥**hexo s**å¯ä»¥æ¬å°é¢è§ææï¼æåè¾å¥**hexo d**ä¸ä¼ å°**Github**ä¸ãè¿æ¶æå¼ä½ ç**github.io**ä¸»é¡µå°±è½çå°åå¸çæç« å¦ã\n\nå°è¿å¿åºæ¬ç¬¬ä¸é¨åå°±å®æäºï¼å·²ç»å®æ´æ­å»ºèµ·ä¸ä¸ªæ¯è¾ç®éçä¸ªäººåå®¢äºï¼æ¥ä¸æ¥æä»¬å°±å¯ä»¥å¯¹æä»¬çåå®¢è¿è¡ä¸ªæ§åå®å¶äºã\n\n\n\n## 3.ä¸»é¢çåºç¨\n\næä»¬è¦å®å¶èªå·±çåå®¢çè¯ï¼é¦åå°±è¦æ¥äºè§£ä¸ä¸`Hexo`åå®¢çä¸äºç®å½åæä»¶çä½ç¨ï¼ä»¥åå¦ä½å¹³æ»æ´æ¢æ¼äº®çä¸»é¢æ¨¡æ¿å¹¶å å¥èªå·±çå®å¶æºä»£ç å®ç°ä¸ªæ§åå®å¶\n\n### 3.1 Hexoç¸å³ç®å½æä»¶\n\n#### 1.1 åå®¢ç®å½ææä»ç»\n\n------\n\næä»¬åå®¢çç®å½ç»æå¦ä¸ï¼\n\n```json\n- node_modules\n- public\n- scaffolds\n- source\n    - _posts\n- themes\n```\n\nä¸é¢ä¾æ¬¡ä»ç»ä¸é¢åä¸ªæä»¶æèç®å½çç¨éï¼\n\n- **_config.yml**ï¼ ç«ç¹éç½®æä»¶ï¼å¾å¤å¨å±éç½®é½å¨è¿ä¸ªæä»¶ä¸­ã\n- **package.json**ï¼ åºç¨æ°æ®ãä»å®å¯ä»¥çåºhexoçæ¬ä¿¡æ¯ï¼ä»¥åå®æé»è®¤æèè¯´ä¾èµçä¸äºç»ä»¶ã\n- **scaffolds**ï¼ æ¨¡çæä»¶ãå½ä½ åå»ºä¸ç¯æ°çæç« æ¶ï¼hexoä¼ä¾æ®æ¨¡çæä»¶è¿è¡åå»ºï¼ä¸»è¦ç¨å¨ä½ æ³å¨æ¯ç¯æç« é½æ·»å ä¸äºå±æ§çåå®¹çæåµä¸ã\n- **scripts**ï¼ æ¾èæ¬çæä»¶å¤¹ï¼ å°±æ¯æ¾jsæä»¶çå°æ¹\n- **source**ï¼ è¿ä¸ªæä»¶å¤¹å°±æ¯æ¾æç« çå°æ¹äºï¼é¤äºæç« è¿æä¸äºä¸»è¦çèµæºï¼æ¯å¦æç« éçå¾çï¼æä»¶ç­ç­ä¸è¥¿ãè¿ä¸ªæä»¶å¤¹æå¥½å®æåä¸ä¸ªå¤ä»½ï¼ä¸¢äºå®ï¼æ´ä¸ªç«ç¹å°±åºäºã\n- **themes**ï¼ ä¸»é¢æä»¶å¤¹ã\n\næä»¬å¹³æ¶åæç« åªéè¦å³æ³¨source/_postsè¿ä¸ªæä»¶å¤¹å°±è¡äºã\n\n\n\n#### 1.2 Hexoåºæ¬éç½®\n\nå¨æä»¶æ ¹ç®å½ä¸ç_config.ymlï¼å°±æ¯æ´ä¸ªHexoæ¡æ¶çéç½®æä»¶äºãå¯ä»¥å¨éé¢ä¿®æ¹å¤§é¨åçéç½®ãè¯¦ç»å¯åèå®æ¹ç[éç½®æè¿°](https://hexo.io/zh-cn/docs/configuration)ã\n\n![image-20231014010735038](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310140107104.png)\n\n\n\n##### 1. ç½ç«\n\nåæ°æè¿°**title**ç½ç«æ é¢**subtitle**ç½ç«å¯æ é¢descriptionç½ç«æè¿°**author**æ¨çåå­**language**ç½ç«ä½¿ç¨çè¯­è¨timezoneç½ç«æ¶åºã**Hexo** é»è®¤ä½¿ç¨æ¨çµèçæ¶åºãæ¶åºåè¡¨ãæ¯å¦è¯´ï¼**America/New_York, Japan,** å **UTC** ã\n\nå¶ä¸­ï¼**description**ä¸»è¦ç¨äº**SEO**ï¼åè¯æç´¢å¼æä¸ä¸ªå³äºæ¨ç«ç¹çç®åæè¿°ï¼éå¸¸å»ºè®®å¨å¶ä¸­åå«æ¨ç½ç«çå³é®è¯ã**author**åæ°ç¨äºä¸»é¢æ¾ç¤ºæç« çä½èã\n\n\n\n##### 2. ç½å\n\nåæ°æè¿°urlç½årootç½ç«æ ¹ç®å½ **permalink**æç« ç[æ°¸ä¹é¾æ¥ ](https://hexo.io/zh-cn/docs/permalinks)æ ¼å¼permalink_defaultsæ°¸ä¹é¾æ¥ä¸­åé¨åçé»è®¤å¼\n\nå¨è¿éï¼ä½ éè¦æurlæ¹æä½ ç **ç½ç«åå**ã\n\npermalinkï¼ä¹å°±æ¯ä½ çææä¸ªæç« æ¶çé£ä¸ªé¾æ¥æ ¼å¼ã\n\næ¯å¦ææ°å»ºä¸ä¸ªæç« å«temp.mdï¼é£ä¹è¿ä¸ªæ¶åä»èªå¨çæçå°åå°±æ¯http://yoursite.com/2022/05/08/tempã\n\nä»¥ä¸æ¯å®æ¹ç»åºçç¤ºä¾ï¼å³äºé¾æ¥çåéè¿æå¾å¤ï¼éè¦çå¯ä»¥å»å®ç½ä¸æ¥æ¾ [æ°¸ä¹é¾æ¥](https://hexo.io/zh-cn/docs/permalinks) ã\n\n> åæ°ç»æ:year/:month/:day/:title/2023/10/10/hello-world :year-:month-:day-:title.html 2019-08-10-hello-world.html \n>\n> :category/:titlefoo/bar/hello-world\n\nåå¾ä¸ç¿»ï¼ä¸­é´è¿äºé½é»è®¤å°±å¥½äºã\n\nä¸é¢ç»åºæçç½ç«éç½®\n\n![image-20231013234646447](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132346523.png)\n\n```yml\ntheme: landscap\n```\n\nthemeå°±æ¯éæ©ä»ä¹ä¸»é¢ï¼ä¹å°±æ¯å¨**themes**è¿ä¸ªæä»¶å¤¹ä¸ï¼å¨å®ç½ä¸æå¾å¤ä¸ªä¸»é¢ï¼é»è®¤ç»ä½ å®è£çæ¯**lanscap**è¿ä¸ªä¸»é¢ãå½ä½ éè¦æ´æ¢ä¸»é¢æ¶ï¼å¨å®ç½ä¸ä¸è½½ï¼æä¸»é¢çæä»¶æ¾å¨themesæä»¶å¤¹ä¸ï¼åä¿®æ¹è¿ä¸ªä¸»é¢åæ°å°±å¯ä»¥äºã\n\n\n\n##### 3. Front-matter\n\n**Front-matter** æ¯mdæä»¶æä¸æ¹ä»¥ **---**åéçåºåï¼ç¨äºæå®ä¸ªå«æä»¶çåéï¼ä¸¾ä¾æ¥è¯´ï¼\n\n```bash\ntitle: Hexo+Githubåå®¢æ­å»ºè®°å½\ndate: 2023-10-13 15:15:44\n```\n\nä¸æ¯é¢åå®ä¹çåæ°ï¼æ¨å¯å¨æ¨¡æ¿ä¸­ä½¿ç¨è¿äºåæ°å¼å¹¶å ä»¥å©ç¨ã\n\nåæ°æè¿°**layout**å¸å± **title**æ é¢ dateå»ºç«æ¥æ **update**æ´æ°æ¥æ **comments**å¼å¯æç« çè¯è®ºåè½ **tags**æ ç­¾ï¼ä¸éç¨äºåé¡µï¼**categories**åç±»ï¼ä¸éç¨äºåé¡µï¼**permalink**è¦çæç« ç½åã\n\nå¶ä¸­ï¼åç±»åæ ç­¾éè¦åºå«ä¸ä¸ï¼åç±»å·æé¡ºåºæ§åå±æ¬¡æ§ï¼ä¹å°±æ¯è¯´**Foo**ï¼**Bar**ä¸ç­äº**Bar**ï¼**Foo**ï¼èæ ç­¾æ²¡æé¡ºåºåå±æ¬¡ã\n\n\n\n### 3.2 æ´æ¢ä¸»é¢\n\n![image-20231013235759767](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310132357944.png)\n\nHexoå®æ¹ä¸ºæä»¬æä¾äºå¾å¤å¼åèå¤§ä½¬æä¾çç²¾ç¾ä¸»é¢ä¾å¤§å®¶æ´æ¢ï¼å¤§å®¶çéæ©ä¸ä¸ªèªå·±åæ¬¢çå³å¯ã\n\nå®ç½ï¼https://hexo.io/themes/\n\nç¬èè¿ééæ©äºä¸ä¸ªç¸å¯¹äºç®çº¦çä¸»é¢ï¼åå­å«keepï¼å¤§å®¶åæ¬¢çä¹å¯ä»¥æ¥è¯è¯ã\n\nè¿éæ¯éä¸ä»çGithubå°åï¼ https://github.com/XPoet/hexo-theme-keep\n\n- ç®åæ¼äº®ï¼æç« åå®¹ç¾è§æè¯»\n- ååºå¼è®¾è®¡ï¼åå®¢å¨æ¡é¢ç«¯ãå¹³æ¿ãææºç­è®¾å¤ä¸åè½å¾å¥½çå±ç°\n- é¦é¡µ `Banner` å¾ç\n- æ¶é´è½´å¼çå½æ¡£é¡µ\n- **è¯äº**çæ ç­¾é¡µååç±»é¡µ\n- ä¸°å¯çå³äºæé¡µé¢\n- å¯èªå®ä¹çæ°æ®çåæé¾æ¥é¡µé¢\n- æ¯ææç« ç½®é¡¶\n- æ¯æ `MathJax`\n- ç¾è§ç**TOC**ç®å½\n- å¯è®¾ç½®å¤å¶æç« åå®¹æ¶è¿½å çæä¿¡æ¯\n- **Twikoo**ã[Valine](https://valine.js.org/) å [Disqus](https://disqus.com/) è¯è®ºæ¨¡åï¼æ¨èä½¿ç¨**Twikoo** ï¼\n- éæäº[ä¸èå­ç»è®¡](http://busuanzi.ibruce.info/)ãè°·æ­åæï¼**Google Analytics**ï¼åæç« å­æ°ç»è®¡ç­åè½\n- æ¯æå¨é¦é¡µçé³ä¹æ­æ¾åè§é¢æ­æ¾åè½\n\nä»çä»ç»ææ¡£åå¾éå¸¸çè¯¦ç»ï¼https://keep-docs.xpoet.cn/ï¼ç®ç´æ¯ä¿å§çº§æç¨ï¼å¤§å®¶å¯ä»¥æ¢æ¢å»æ¢ç´¢ã\n\n![image-20231014000705404](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310140007545.png)\n\n\n\n## 4.ä¼ååè½\n\nä½¿ç¨**Netlify** çç»§æ¿é¨ç½²å¯ä»¥å¨å®çæå¡å¨æç§ä½ è®¾å®çå½ä»¤ï¼èªå¨è¿è¡é¨ç½²ç½ç«ï¼ä¹å°±æ¯è¯´ï¼å½ä½ ææºç ç´æ¥æäº¤å°githubçæ¶åï¼netlifyå°±ä¼èªå¨é¨ç½²å¥½ä½ çç½ç«ãgithubç¨æ¥ä¿å­åå®¢çæºç  ,è**netlify**å­æéæç½ç«ã\n\n\n\nå¯ä»¥ä½¿ç¨githubçè´¦å·ç´æ¥ç»å½ï¼è¿æ ·å³èä»åºçæ¶åä¹æ´å æ¹ä¾¿ã\n\n![image-20231014005141065](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310140051210.png)\n\n\n\néç½®å¥½**Hexo**çé¨ç½²å½ä»¤ï¼å¹¶è®¾ç½®åå¸ç®å½ãå¦å¾ã\n\né¨ç½²å½ä»¤ä¸æ¬å°é¨ç½²çå½ä»¤æ¯ä¸æ ·ç\n\n```bash\nhexo generate\n```\n\n![image-20231014005556487](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310140055586.png)\n\néç½®ä½ çååï¼**netlify** é»è®¤ç»ä½ ä¸ä¸ªäºçº§ååï¼ä½ å¯ä»¥ä¿®æ¹å®ï¼ä¹å¯ä»¥ç»å®èªå·±å·²æçååãåæ¶ä½ ä¹å¯ä»¥ä½¿ç¨åè´¹æä¾çsslè¯ä¹¦,å¼å¯Httpsã\n\nå°è¿ééç½®å°±åºæ¬å®æäºãæ­¤æ¶ä½ çç½ç«å°±å¯ä»¥ä½¿ç¨å®åéæä½ ç»å®çååè®¿é®äºãä½ ä¹å¯ä»¥æ ¹æ®ä½ èªå·±çéè¦è¿è¡å«çæ¹å¨ã\n\nå½ä½ åå®ææ¡£æ¶ï¼æ**Hexo**ç®å½ç´æ¥æäº¤å°**Git**ä»åºä¸­ï¼**netlify**ä¼æç½ç«èªå¨é¨ç½²å¥½ï¼ä½ å¯ä»¥å¨**nelify**æ¥çä½ çé¨ç½²æ¥å¿ãè¿æ ·ä½ ç**Git**ä»åºå°±åªç¨æ¥ä¿å­hexoçæºç ï¼èç½ç«æ¯æ¾å¨**netlify**ä¸çã**netlify**ä¹æcdnï¼ä½æ¯éåº¦ä»ç¶ä¸æ¯å¾å¥½ï¼æå¡å¨å¨å½å¤ï¼ä¹å°±æ¯è¿æ ·äºãä½ ä¹å¯ä»¥ä½¿ç¨äºèªå·±ç**cdn**æå¡ï¼ä»¥å å¿«ç½ç«çè®¿é®éåº¦ã\n\n**æåææ**\n\nè®©æä»¬ççæåçææå§\n\n![image-20231014005833120](https://gaoziman.oss-cn-hangzhou.aliyuncs.com/Leo100/202310140058298.png)\n\næå´è¶£çå°ä¼ä¼´å«ç¹è±«äºï¼æç´§æ­å»ºèµ·æ¥ï¼\n\n\n\n## 5.æ»ç»\n\nä»¥ä¸ä¾¿æ¯æ¬æçå¨é¨åå®¹ï¼æ¬äººæçå­¦æµï¼æç« æä»ä¹éè¯¯çå°æ¹ï¼æ¬¢è¿å¤§ä½¬ä»¬æ¹è¯ææ­£ï¼ææ¯**Leo**ï¼ä¸ä¸ªå¨äºèç½è¡ä¸çå°ç½ï¼ç«å¿æä¸ºæ´å¥½çèªå·±ã\n\nå¦æä½ æ³äºè§£æ´å¤å³äº**Leo**ï¼å¯ä»¥å³æ³¨å¬ä¼å·-ç¨åºåLeoï¼åé¢æç« ä¼é¦ååæ­¥è³å¬ä¼å·ã\n\n",
+        "category": "æç« ",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 20,
+        "thumbNum": 2,
+        "favourNum": 1,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1768274766864605186",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-21 18:34:59",
+        "updateTime": "2024-03-26 19:13:19",
+        "user": {
+          "id": "1768274766864605186",
+          "planetCode": "12644",
+          "userName": "æ åå°å",
+          "userAvatar": "https://pic.code-nav.cn/user_avatar/1768274766864605186/qzSxxhhE-Leo.jpg",
+          "gender": 1,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": [
+            "Java"
+          ],
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": 1,
+          "jobStatus": "å·²å·¥ä½",
+          "company": null,
+          "job": "åç«¯",
+          "workYear": 1,
+          "direction": "åç«¯",
+          "goal": "ç¤¾æ",
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 0,
+          "followNum": 3,
+          "followStatus": null,
+          "vipExpireTime": "2025-03-14 21:53:56",
+          "lastLoginTime": null,
+          "createTime": "2024-03-14 21:55:32",
+          "updateTime": "2024-03-19 16:46:52"
+        },
+        "tags": [
+          "æç« ",
+          "åå®¢"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1769916786301493249",
+        "title": "ä¸ç¯æç« å¸¦ä½ å®ç°èªå®ä¹æ³¨è§£",
+        "description": "éè¿æ¥å¿ç³»ç»æ¥å¼åºèªå®ä¹æ³¨è§£çåå»ºæ¹æ³",
+        "content": "å¨springBootä¸­ï¼æ³¨è§£æ¯ç¼ç æ¶å¿ä¸å¯å°çï¼å®å¯ä»¥å¸®å©æä»¬æ´æ¹ä¾¿å¿«æ·çå»å¼åãå¸¸è§çæ³¨è§£å¦ï¼`@Autowiredã@Slf4jã@Data`ç­ç­ã\n\nç¶èè¿äºæ³¨è§£é½æ¯å«äººå·²ç»å°è£å¥½ç»æä»¬ç¨çï¼å¦ææä»¬æ³èªå®ä¹ä¸ä¸ªæ¥æç¹å«åè½çæ³¨è§£ï¼è¯¥æä¹æä½å¢ï¼\n\nçå®è¿ç¯æç« ï¼ç»ä½ ç­æ¡~\n\nä»å¤©ä»¥æ¥å¿åè½ä¸ºä¾ï¼çµæ´»çè¿ç¨èªå®ä¹æ³¨è§£æ¹ä¾¿å¿«æ·çè®°å½æ¯ä¸ªæ¥å£çæ¥å¿ã\n\nå¨é¡¹ç®ä¸­ï¼æä¼å¤çæ¥å£ï¼å¦ææ¥å£æ¥éäºï¼è¯¥æä¹å»å¿«éå®ä½ä»£ç å¢ï¼è¿ä¸ªæ¶åå°±è¦ç¨å°æ¥å¿äºãå½æ¥å£æ¥æ¶å°è¯·æ±çæ¶åï¼æå¸æå¯ä»¥è®°å½ä¸æ¥è¿ä¸ªæ¥å£çåç§ä¿¡æ¯ãæ¯å¦è¯·æ±æ¶é´ãè¯·æ±åæ°ï¼ç»ææ¶é´ç­ï¼è¿å¯ä»¥å¨æ¥å£å¼å§åç»æçæ¶åå ä¸ä¸ªæ è®°ï¼æ¹ä¾¿åºç°æ¥éæèbugçæ¶åå¯ä»¥å¿«éå®ä½å°æ¯åªä¸ªæ¥å£åºäºé®é¢ã\n\n---\n\n\n\n##  ä¸ä½¿ç¨æ³¨è§£\n\næä»¬ä¹å¯ä»¥å¨æ¥å£æ¹æ³çå¼å¤´åç»å°¾å ä¸è¡æ¥å¿ã\n\n```\npublic class Mycontroller {\n    @GetMapping(\"/get\")\n    public String get(String name,int age){\n        log.info(\"Mycontroller**********get********start\");\n        System.out.println(\"æ§è¡äºgetæ¹æ³\");\n        log.info(\"Mycontroller**********get********end\");\n        return name;\n    }\n}\n```\n\næ§è¡ç»æï¼\n\n![image-20240314170511437](https://img.pidanxia.ink/image202403182011121.png)\n\næ¹æ³çé¦å°¾ä¸¤è¡é½ä¼æä¸ä¸ªæ¥å¿è¾åºï¼æè¿ä¸ªæ¹æ³çææè¿è¡åå¨äºæ¥å¿éé¢ï¼å¦æä¸ªæ¹æ³åºç°äºé®é¢ï¼å°±å¾å®¹æå®ä½å°è¿éäºã\n\næ¯å¦æææåä¸ä¸ªæ¥éï¼`int i = 2/0;`\n\n```\n    @GetMapping(\"/get\")\n    public String get(String name,int age){\n        log.info(\"Mycontroller**********get********start\");\n        int i = 2/0;\n        System.out.println(\"æ§è¡äºgetæ¹æ³\");\n        log.info(\"Mycontroller**********get********end\");\n        return name;\n    }\n```\n\né£ä¹è¾åºç»æå¦ä¸ï¼\n\n![image-20240314170557176](https://img.pidanxia.ink/image202403182011123.png)\n\nå¯ä»¥çå°æ¥éçä¸ä¸è¡æ¥å¿å®ä½äº`get`æ¹æ³ãæä»¬åªéå¨`get`æ¹æ³éé¢æ¾é®é¢å°±å¥½äºã\n\næ¯ä¸ªæ¹æ³çé¦å°¾é½è¦è¿æ ·åä¸ä¸ªæ¥å¿è®°å½ï¼ä»£ç å°±ä¼**å¤§éåä½**ãæ³è·åå¥åçè¯ï¼è¿å¾ååä¸æ®µä»£ç æ¥å®ç°ï¼å¹¶ä¸æ ¹æ®æ¯ä¸ªæ¹æ³çå¥åæ°éãç±»åçä¸åï¼å¯è½ä»£ç ä¹è¦ç¸åºçåå¨ã\n\næ¢ç¶è¿ä¸ªæ¯éå¤æ§çå·¥ä½ï¼èä¸é»è¾ä¸é½æ¯ï¼**å¨æ¹æ³å¼å§ä¹ååæ¹æ³ç»æä¹ååä¸ä¸ªæ è®°**ãé£ä¹æä»¬è½ä¸è½æè¿ä¸é¨åæ½ååºæ¥ï¼åªåä¸æ¬¡ä»£ç ï¼å°±è½ä½ç¨å¨æ¯ä¸ä¸ªæ¹æ³ä¸é¢å¢ï¼\n\næ¯«æ çé®ï¼ç­æ¡æ¯**å¯ä»¥**ï¼\n\n---\n\n\n\n## ä½¿ç¨èªå®ä¹æ³¨è§£\n\nå¨ä¸ä¸ªäºæçå¼å§åç»ææå¥å¦ä¸ä¸ªäºæï¼å¾å®¹æèæ³å°Springçä¸ä¸ªéè¦ç¹æ§ââ**AOP**ã\n\n> SpringçAOPï¼Aspect-Oriented Programmingï¼é¢ååé¢ç¼ç¨ï¼æ¯Springæ¡æ¶ä¸­çä¸ä¸ªéè¦ç¹æ§ï¼ç¨äºå°æ¨ªåå³æ³¨ç¹ä»åºç¨ç¨åºçä¸»ä¸å¡é»è¾ä¸­åç¦»åºæ¥ï¼ä½¿å¾å³æ³¨ç¹çä»£ç å¯ä»¥è¢«æ¨¡ååãéç¨ï¼å¹¶ä¸ä¸ä¸»ä¸å¡é»è¾è§£è¦ã\n\n### å®ä¹æ³¨è§£\n\nä½¿ç¨`@interface`å³é®å­å®ä¹ä¸ä¸ªæ³¨è§£\n\n```\npublic @interface LogInfo {\n\n}\n```\n\nå¨èªå®ä¹æ³¨è§£ä¸­ï¼æ ¹æ®éè¦æ æ³¨åæ³¨è§£ï¼å¦ææ²¡æç¹å®éæ±çè¯**ä¹å¯ä»¥ä¸æ æ³¨**ã\n\nä¸å±æä»¥ä¸5ä¸ªåæ³¨è§£ï¼\n\n1. **@Retention**ï¼ä¿çç­ç¥ï¼ï¼\n   - `RetentionPolicy.SOURCE`ï¼æ³¨è§£ä»å­å¨äºæºä»£ç ä¸­ï¼å¨ç¼è¯æ¶ä¼è¢«ä¸¢å¼ãè¿ç§ç±»åçæ³¨è§£éå¸¸ç¨äºæä¾ç¼è¯æ¶çè¾å©ä¿¡æ¯ï¼ä¸ä¼å¯¹è¿è¡æ¶äº§çå½±åã\n   - `RetentionPolicy.CLASS`ï¼æ³¨è§£å­å¨äºç¼è¯åçå­èç æä»¶ä¸­ï¼ä½å¨è¿è¡æ¶ä¼è¢«ä¸¢å¼ãè¿ç§ç±»åçæ³¨è§£å¯ä»¥å¨ç¼è¯æ¶å¯¹ä»£ç è¿è¡ä¸äºå¤çï¼ä½ä¸ä¼å½±åç¨åºè¿è¡æ¶çè¡ä¸ºã\n   - `RetentionPolicy.RUNTIME`ï¼æ³¨è§£å¨è¿è¡æ¶å¯ä»¥éè¿åå°è·åå°ãè¿ç§ç±»åçæ³¨è§£å¯ä»¥å¨è¿è¡æ¶å¯¹ç¨åºçè¡ä¸ºè¿è¡å¨æè°æ´ï¼ä¾å¦å¨AOPï¼é¢ååé¢ç¼ç¨ï¼ä¸­ç»å¸¸ä½¿ç¨ã\n2. **@Target**ï¼ç®æ ç±»åï¼ï¼\n   - `ElementType.METHOD`ï¼æå®æ³¨è§£å¯ä»¥åºç¨äºæ¹æ³ã\n   - `ElementType.FIELD`ï¼æå®æ³¨è§£å¯ä»¥åºç¨äºå­æ®µã\n   - `ElementType.TYPE`ï¼æå®æ³¨è§£å¯ä»¥åºç¨äºç±»ãæ¥å£ï¼åæ¬æ³¨è§£ç±»åï¼ã\n   - `ElementType.PARAMETER`ï¼æå®æ³¨è§£å¯ä»¥åºç¨äºåæ°ã\n   - `ElementType.CONSTRUCTOR`ï¼æå®æ³¨è§£å¯ä»¥åºç¨äºæé å½æ°ç­ã\n3. **@Documented**ï¼ææ¡£åï¼ï¼\n   - å½ä¸ä¸ªæ³¨è§£è¢«@Documentedä¿®é¥°æ¶ï¼è¿ä¸ªæ³¨è§£å°ä¼åå«å¨Javadocçæçææ¡£ä¸­ï¼ä½¿å¾æ³¨è§£çä¿¡æ¯å¯ä»¥è¢«ææ¡£åå±ç¤ºã\n4. **@Inherited**ï¼ç»§æ¿æ§ï¼ï¼\n   - å¦æä¸ä¸ªæ³¨è§£è¢«@Inheritedä¿®é¥°ï¼é£ä¹å­ç±»ä¼ç»§æ¿ç¶ç±»çè¯¥æ³¨è§£ãè¿å¯¹äºä¸äºéè¦å¨ç»§æ¿å³ç³»ä¸­ä¼ éæ³¨è§£çæåµéå¸¸æç¨ã\n5. **@Repeatable**ï¼å¯éå¤æ§ï¼ï¼\n   - åè®¸ä¸ä¸ªæ³¨è§£å¨åä¸ä¸ªç®æ ä¸è¢«å¤æ¬¡åºç¨ï¼èä¸éè¦ä½¿ç¨å®¹å¨æ³¨è§£æ¥åè£¹å¤ä¸ªç¸åçæ³¨è§£å®ä¾ãè¿æ ·å¯ä»¥ä½¿ä»£ç æ´å ç®æ´åæè¯»ã\n\n### å¼AOPä¾èµ\n\nè¦å®ç°AOPèªå®ä¹æ³¨è§£ï¼ç¬¬ä¸æ­¥åå¼å¥AOPçä¾èµï¼\n\n```\n    <!--AOP-->\n    <dependency>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-aop</artifactId>\n    </dependency>\n```\n\n### ç¼å AOP ç¨åº\n\næ°å»ºä¸ä¸ªAOPç±»ï¼éå¯¹äºç¹å®æ¹æ³æ ¹æ®ä¸å¡éè¦è¿è¡ç¼ç¨ (å  @Aspect æ³¨è§£å£°æä¸º AOP ç±»ï¼\n\nè¿ä¸ªç±»ä¸­ï¼æä»¬è¦å®ç°èªå®ä¹æ³¨è§£çåè½ï¼æ¯å¦å¨æ¹æ³å¼å§ä¹åï¼åä¸ä¸ªæ è®°ï¼è®°å½è¯¥æ¹æ³çå¥åï¼æ¹æ³ç»æä¹åååä¸ä¸ªæ è®°ã\n\næ°å»ºä¸ä¸ªAOPç±»ï¼\n\n```\n@Aspect\n@Component\n@Slf4j\npublic class LogAOP {\n}\n```\n\n> @Aspectæ³¨è§£ï¼æ è®°è¯¥ç±»ä¸ºåé¢ç±»ï¼Spring AOPä¼èªå¨è¯å«å¸¦æ`@Aspect`æ³¨è§£çç±»ï¼å¹¶å°å¶è§ä¸ºåé¢ï¼ç¶åæ ¹æ®å®ä¹çéç¥ååç¹æ¥å®ç°æ¨ªåé»è¾ã\n>\n> @Componentï¼ç¨æ¥è¡¨ç¤ºä¸ä¸ªåSpringå®¹å¨ç®¡ççç»ä»¶çæ³¨è§£ãå¯ä»¥è®©Springèªå¨æ«æå¹¶è¯å«è¢«æ³¨è§£çç±»ï¼ç¶åå°å¶å®ä¾åå¹¶å å¥å°Springå®¹å¨ä¸­ç®¡çã\n\nåä¸ä¸ªå¨**æ¥å£æ§è¡ä¹å**è¦æ§è¡çé»è¾æ¹æ³ï¼\n\nç¨`@Before`æ³¨è§£æ æ³¨ï¼éé¢ç`@annotation`æ¯ç¨äºå®ä¹åç¹è¡¨è¾¾å¼çä¸ç§ç¹æ®ç¨æ³ï¼\n\nä¸åä»£ç ä¸­`@Before(\"@annotation(LogInfo)\")`è¡¨ç¤ºå¨æ§è¡**è¢«èªå®ä¹æ³¨è§£æ è®°çæ¹æ³å**æ§è¡`logBeforeæ¹æ³`\n\n```\n@Aspect\n@Component\n@Slf4j\npublic class LogAOP {\n    @Before(\"@annotation(LogInfo)\")\n    public void logBefore(JoinPoint joinPoint){\n        // è·åæ¹æ³æå¨ç±»çåç§°\n        String fullClassName = joinPoint.getSignature().getDeclaringTypeName();\n\n        // è·åæ¹æ³åç§°\n        String methodName = joinPoint.getSignature().getName();\n\n        // æåç±»åçæåä¸é¨å\n        // æ¯å¦ï¼com.pidanxia.aop.LogAOPï¼åªæ¿LogAOP\n        String[] classNameParts = fullClassName.split(\"\\\\.\");\n        String className = classNameParts[classNameParts.length - 1];\n\n        // å¨æ¹æ³æ§è¡åè®°å½æ¥å¿\n        log.info(className + \"****************\" + methodName + \"****************start\");\n\n        // è·ååæ°åè¡¨\n        Object[] args = joinPoint.getArgs();\n        // å¥åéå\n        Map<String, Object> map = new HashMap<>();\n        // è·åæ¹æ³åæ°åç§°\n        MethodSignature methodSignature = (MethodSignature) joinPoint.getSignature();\n        String[] parameterNames = methodSignature.getParameterNames();\n        // è¾åºå¥åå¼\n        if (parameterNames != null) {\n            for (int i = 0; i < args.length; i++) {\n                if (parameterNames.length > i) {\n                    String paramName = parameterNames[i];\n                    Object paramValue = args[i];\n                    map.put(paramName, paramValue);\n                }\n            }\n        }\n        JSONObject json = new JSONObject(map);\n        log.info(\"\\nå¥åï¼\" + json);\n    }\n```\n\nä¹åæäºï¼çåºä¹è¦æä¸ä¸ªä¹åçãåä¸ä¸ªå¨**æ¥å£æ§è¡ä¹å**è¦æ§è¡çé»è¾æ¹æ³ï¼\n\nç¨`@After`æ³¨è§£æ æ³¨\n\n```\n    @After(\"@annotation(LogInfo)\")\n    public void logAfter(JoinPoint joinPoint){\n        // è·åæ¹æ³æå¨ç±»çåç§°\n        String fullClassName = joinPoint.getSignature().getDeclaringTypeName();\n\n        // è·åæ¹æ³åç§°\n        String methodName = joinPoint.getSignature().getName();\n\n        // æåç±»åçæåä¸é¨å\n        String[] classNameParts = fullClassName.split(\"\\\\.\");\n        String className = classNameParts[classNameParts.length - 1];\n\n        // å¨æ¹æ³æ§è¡åè®°å½æ¥å¿\n        log.info(className + \"****************\" + methodName + \"****************end\");\n    }\n```\n\n### ä½¿ç¨èªå®ä¹æ³¨è§£\n\nå¨æ¥å£å¤ä½¿ç¨èªå®ä¹æ³¨è§£æ è®°ï¼\n\n```\n    @LogInfo\n    @GetMapping(\"/get\")\n    public String get(String name,int age){\n        System.out.println(\"æ§è¡äºgetæ¹æ³\");\n        return name;\n    }\n```\n\næ§è¡ç»æå¦ä¸ï¼\n\n![image-20240314175830504](https://img.pidanxia.ink/image202403182011124.png)\n\nå³ä½¿æä»¬æ²¡æå¨æ¥å£æ¹æ³ä¸­åä»»ä½çæ¥å¿é»è¾ï¼åªè¦æ è®°äºæ³¨è§£ï¼å°±ä¼èªå¨è°ç¨æ³¨è§£æ¹æ³ï¼\n\n### æ´åæ`@Around`æ³¨è§£\n\næäºä¹åï¼æäºä¹åï¼è¿ä¼æä¸ä¸ªåå´çæ³¨è§£ï¼\n\nä¸é¢ç`@Before`å`@After`å¯ä»¥åå¹¶ä¸ºä¸ä¸ªæ³¨è§£ï¼`@Around`\n\nä¸è¬å¼åä¸­é½æ¯ä½¿ç¨`@Around`æ³¨è§£æ¯è¾å¤ï¼å ä¸ºè¿æ ·åªç¨åä¸ä¸ªæ³¨è§£æ¹æ³å°±å¯ä»¥äºã\n\nä½¿ç¨æ¹æ³ä¹å¾ç®åï¼å°±æ¯ç¨`Object result = point.proceed();`æ¥éå¼ä¹ååä¹åæ§è¡çä¸¤é¨åã\n\n`Object result = point.proceed();`è¯­å¥å°±æ¯æ§è¡æ¥å£æ¹æ³çææï¼æ§è¡å®è¿æ¡è¯­å¥ï¼æ¥å£æ¹æ³å°±æ§è¡å®äºã\n\n**ç¹å«æ³¨æï¼**ç¨`@Around`æ³¨è§£æ æ³¨çæ¹æ³å¥åå¿é¡»æ¯ï¼**`ProceedingJoinPoint`ç±»å**çï¼å ä¸º`proceed()`æ¹æ³æ¯å¨`ProceedingJoinPoint`æ¥å£ä¸­å®ä¹çï¼`JoinPoint`æ¥å£ä¸­æ²¡æå®ä¹ã\n\næä¹åç`logBeforeæ¹æ³`å`logAfteræ¹æ³`é½æ³¨éæï¼ç¶ååä¸ä¸ªæ°ç`logAroundæ¹æ³`ï¼\n\n```\n    @Around(\"@annotation(LogInfo)\")\n    public void logAround(ProceedingJoinPoint joinPoint) throws Throwable{\n\t\t\n\t\tâ¦â¦\t//è¿éä»£è¡¨logBeforeæ¹æ³çä»£ç ï¼ä¸æ¨¡ä¸æ ·æ·è´è¿æ¥å³å¯\n\t\t\n        // æ§è¡åæ¹æ³\n        Object result = joinPoint.proceed();\n\n        // å¨æ¹æ³æ§è¡åè®°å½æ¥å¿\n        log.info(className + \"****************\" + methodName + \"****************end\");\n        \n    }\n```\n\nç¶ååæ¥è¯·æ±ä¸ä¸æ¥å£ï¼ççæ§å¶å°è¾åºï¼\n\n![image-20240314182424697](https://img.pidanxia.ink/image202403182011125.png)\n\nå¯ä»¥çå°æææ¯è·ä¹åçã\n\n---\n\n\n\n## ä½¿ç¨æ¦æªå¨\n\nå¶å®èªå®ä¹æ³¨è§£å¹¶ä¸éç¨äºç³»ç»æ¥å¿ï¼èæ¯æ´éç¨äºä¸äºç¹å®çåºæ¯ï¼ä¸¾ä¸ªç®åçä¾å­ï¼**å®¡è®¡æ¥å¿**ã\n\n**å®¡è®¡æ¥å¿**è®°å½ç³»ç»çæä½å®¡è®¡ä¿¡æ¯ï¼åæ¬ç¨æ·çæä½è¡ä¸ºãæéåæ´ç­ï¼ç¨äºåè§æ§åè¿½è¸ªç¨æ·æä½ã\n\nèæä»¬ä¸é¢å®ç°çæ¯**ç³»ç»æ¥å¿**ï¼è®°å½ç³»ç»çè¿è¡ç¶æåäºä»¶ï¼å¦ç³»ç»å¯å¨ãå³é­ãéå¯ç­ï¼ç¨äºç³»ç»çæ§åæéææ¥ã\n\nå®¡è®¡æ¥å¿ä¸ç³»ç»æ¥å¿æå¤§çåºå«æ¯ï¼ç³»ç»æ¥å¿ä¸­ä¸è¬ä¼è®°å½çå¤§é¨åçè³æ¯ææçæ¥å£æ§è¡ä¿¡æ¯ï¼èå®¡è®¡æ¥å¿åªéè®°å½ç¨æ·æä½çå³é®æ­¥éª¤ã\n\nä¾å¦ï¼\n\nèå¸Aåå»ºäºå­¦çBãè¿ä¸ªè¿ç¨ä¸­ä¾æ¬¡è°ç¨äº`listãadd`è¿ä¸¤ä¸ªæ¥å£ã\nç³»ç»æ¥å¿ä¼è®°å½è¿ä¸¤ä¸ªæ¥å£çææä¿¡æ¯ã\nèå®¡è®¡æ¥å¿ä¼è®°å½ï¼èå¸Aåå»ºäºå­¦çBã\n\né£ä¹æä»¬å°±å¯ä»¥å¨`add`è¿ä¸ªæ¥å£ä¸æ æ³¨æä»¬çèªå®ä¹æ³¨è§£ï¼è¿æ ·æ¢èçäºæ¥å¿ç©ºé´ï¼ä¹è§£å³äºä»£ç åä½çé®é¢ï¼\n\nä¹åæä»¬è¯´è¿èªå®ä¹ä»£ç ä¸éç¨äºç³»ç»æ¥å¿ï¼å ä¸ºæä»¬åç°ï¼æäºèªå®ä¹æ³¨è§£ï¼ä»£ç æ¯ä¹åç®æ´äºï¼å¶å®æä»¬ä¼åç°ï¼æ¯ä¸ªæ¹æ³å¤´ä¸é½è¦é¡¶ä¸ä¸ªèªå®ä¹æ³¨è§£ï¼è¿å¶å®ä¹æ¯ä»£ç åä½ã\n\né£ä¹ææ²¡æä¸ç§åæ³ï¼æ¢è½åèªå®ä¹æ³¨è§£é£æ ·æ¹ä¾¿ï¼èä¸ä¹ä¸ç¨å¨æ¯ä¸ªæ¹æ³å¤´ä¸åå«æ æ³¨å¢ï¼\n\nç­æ¡ä¾ç¶æ¯è¯å®çï¼\n\næä»¬å¯ä»¥ä½¿ç¨æ¦æªå¨æ¥ä»£æ¿èªå®ä¹æ³¨è§£çæä½.\n\næ¦æªå¨ä¸èªå®ä¹æ³¨è§£çå®ç°æ­¥éª¤ç¸ç±»ä¼¼ï¼é¤äºæ¦æªå¨ä¸ç¨å®ä¹æ³¨è§£ï¼å¶ä»æ­¥éª¤è·ä¸é¢æ¯ä¸æ ·çãåªéæåæ³¨è§£éçåç¹è¡¨è¾¾å¼æ¢æè·¯å¾çå½¢å¼å³å¯ï¼\n\n```\n    @Around(\"execution(* com.pidanxia.sqlboy.controller.*.*(..))\")\n    public void logInterceptor(ProceedingJoinPoint joinPoint) throws Throwable{\n\t\tâ¦â¦ //åå®¹ä¸logAroundæ¹æ³ä¸æ ·\n    }\n```\n\n`@Around`éçåç¹è¡¨è¾¾å¼åæäº`\"execution(* com.pidanxia.sqlboy.controller.*.*(..))\"`\n\næææ¯ï¼\n\n- `execution`: è¡¨ç¤ºå¹éæ¹æ³æ§è¡çè¿æ¥ç¹ã\n- `*`: ç¬¬ä¸ä¸ª`*`è¡¨ç¤ºå¹éä»»æè¿åç±»åçæ¹æ³ã\n- `com.pidanxia.sqlboy.controller.*`: è¡¨ç¤ºå¹é`com.pidanxia.sqlboy.controller`åä¸çä»»æç±»ã\n- `*`: ç¬¬äºä¸ª`*`è¡¨ç¤ºå¹éä»»ææ¹æ³åã\n- `(..)`: è¡¨ç¤ºå¹éä»»æåæ°åè¡¨ã\n\nè¿æ®µä»£ç çå«ä¹æ¯ï¼æ¦æª`com.pidanxia.sqlboy.controller`åä¸ææç±»çæææ¹æ³ï¼å¹¶å¨è¿äºæ¹æ³æ§è¡ä¹ååä¹åæ§è¡èªå®ä¹çé»è¾ã\n\nä¸ºäºçåºåºå«ï¼ææä¹åçèªå®ä¹æ³¨è§£æ³¨éæï¼å¹¶ä¸å®ä¹ä¸ä¸ªæ°çèªå®ä¹æ³¨è§£ï¼`LogInfo2`ï¼ä¸é¢æ¯æ°æ³¨è§£çæ§è¡æ¹æ³ï¼\n\n```\n    @Around(\"@annotation(LogInfo2)\")\n    public void LogInfo2Around(ProceedingJoinPoint joinPoint) throws Throwable{\n        // è·åæ¹æ³åç§°\n        String methodName = joinPoint.getSignature().getName();\n        log.info(\"ææ¯LogInfo2æ³¨è§£ï¼æè®°å½äºæ§è¡äº\" + methodName + \"æ¹æ³~~~\");\n        // æ§è¡åæ¹æ³\n        Object result = joinPoint.proceed();\n    }\n```\n\nç¶åæå®ä¹äºä¸¤ä¸ªæ¥å£ï¼`getåpost`ï¼`get`æ¹æ³æ²¡æå èªå®ä¹æ³¨è§£ï¼è`post`æ¹æ³å äºæ°çèªå®ä¹æ³¨è§£\n\n```\n    @GetMapping(\"/get\")\n    public String get(String name,int age){\n        System.out.println(\"æ§è¡äºgetæ¹æ³\");\n        return name;\n    }\n\n    @LogInfo2\n    @PostMapping(\"/post\")\n    public Num post(@RequestBody Num num){\n        System.out.println(\"æ§è¡äºpostæ¹æ³\");\n        return num;\n    }\n```\n\nåå«è¯·æ±ä¸¤ä¸ªæ³¨è§£ççæä»ä¹ä¸ä¸æ ·çå°æ¹ï¼\n\n![image-20240315100552954](https://img.pidanxia.ink/image202403182011126.png)\n\nå¯ä»¥çå°è½ç¶`get`æ¹æ³ä¸­æ²¡ææ æ³¨ä»»ä½çæ³¨è§£ï¼ä½æ¯ä¹è®°å½äºæ¥å¿ãè`post`æ¹æ³ä¸­ï¼è¿æå°åºäºèªå®ä¹æ³¨è§£çâå®¡è®¡æ¥å¿âã\n\næ»ç»ï¼\n\n- **æ¦æªå¨éåç¨äº**è·¨è¶å¤ä¸ªè¯·æ±å¤çå¨çéç¨æä½ï¼å¦æ¥å¿è®°å½ãæéæ£æ¥ç­ãæ´éç¨äº**å¤§èå´**çéç¨çæä½ã\n- **èªå®ä¹æ³¨è§£éåç¨äº**æ è®°ç¹å®çç±»ãæ¹æ³æå­æ®µï¼å¹¶æ ¹æ®æ è®°æ§è¡ç¸åºçé»è¾ï¼å¯ä»¥**æ´çµæ´»**å°å®ä¹ç¹å®è¡ä¸ºã\n\n---\n\n",
+        "category": "æç« ",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 25,
+        "thumbNum": 4,
+        "favourNum": 3,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1674965546757525505",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-19 10:40:19",
+        "updateTime": "2024-03-26 16:45:58",
+        "user": {
+          "id": "1674965546757525505",
+          "planetCode": "23765",
+          "userName": "æ å",
+          "userAvatar": null,
+          "gender": null,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": null,
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": null,
+          "jobStatus": null,
+          "company": null,
+          "job": null,
+          "workYear": null,
+          "direction": null,
+          "goal": null,
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 2,
+          "followNum": 0,
+          "followStatus": null,
+          "vipExpireTime": "2024-06-17 18:42:34",
+          "lastLoginTime": null,
+          "createTime": "2023-07-01 10:18:00",
+          "updateTime": "2024-03-20 08:43:43"
+        },
+        "tags": [
+          "æç« "
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1768121476629684226",
+        "title": "åºäº GA éä¼ ç®æ³çæºè½ç»é¢æ¨¡åçè®¾è®¡ä¸åºç¨",
+        "description": "åºäº PyGad + Flask çéä¼ ç®æ³å®ç°çæºè½é¢åçæé¡¹ç®ï¼æ ¹æ®é¢åé¢ç®é¾åº¦åå¸ãé¢ç®ç±»ååå¸ãåä¼è½åç­åæ°å¾å°æä¼é¢ç®ç»åæ¹æ¡",
+        "content": "å¨OJç³»ç»ä¸­ï¼é¢åçææ¯ä¸ä¸ªè³å³éè¦çç¯èã\n\nä¸è¬æ¥è¯´ï¼é¢åç±å¤éé¢ç®ç»åèæï¼ä»¥æ»¡è¶³ç¹å®éæ±ï¼å¦åä¼è½åãé¢ååå¸ãé¾åº¦æ¯ä¾åç¥è¯ç¹åå¸ç­ã\n\nç¶èï¼ä¼ ç»çæ¹æ³å¾å¾ä¾èµäºç»éªï¼éè¿ç­éåç»åé¢ç®æ¥è¾¾å°é¢æç®æ ã\n\nä½è¿种方法存在时间成本高、误差率大的问题，对于新手来说尤其不友好。\n\n因此，本文提出了一种新的思路：利用GA遗传算法来解决这一问题。通过将各种因素作为适应度函数的组成参数，在经过多次遗传进化操作后，最终得到相对最优的组合方案，给出题者提供优质的建议，以提高出题效率。\n\n## （1）遗传算法简介和应用技术\n\n遗传算法是受自然进化理论启发的一系列搜索算法。通过模仿自然选择和繁殖的过程，遗传算法可以为涉及搜索，优化和学习的各种问题提供高质量的解决方案。同时，它们类似于自然进化，因此可以克服传统搜索和优化算法遇到的一些障碍，尤其是对于具有大量参数和复杂数学表示形式的问题。\n\n（Genetic Algorithm，简称GA）起源于对生物系统所进行的计算机模拟研究，是一种 随机全局搜索优化 方法，它模拟了自然选择和遗传中发生的 复制 、 交叉 (crossover)和变异 (mutation)等现象，从任一初始种群（Population）出发，通过随机选择、交叉和变异操作，产生一群更适合环境的个体，使群体进化到搜索空间中越来越好的区域，这样一代一代不断繁衍进化，最后收敛到一群最适应环境的个体（Individual），从而求得问题的优质解。\n\n详细参考：https://zhuanlan.zhihu.com/p/436453994\n\n本文使用 **PyGad** 依赖库（版本：2.19.2），实现 GA 的代码实现，详情使用可参考以下链接：\n\n1. 官方文档：[https://pygad.readthedocs.io/en/latest/pygad.html](https://pygad.readthedocs.io/en/latest/pygad.html#pygad-ga-class)\n2. Demo使用：https://zhuanlan.zhihu.com/p/385918911\n\n## （2）总体思路\n\n[![cwTYO.png](https://i0.imgs.ovh/2024/03/13/cwTYO.png)](https://imgloc.com/image/cwTYO)\n\n## （3）适应度函数设计\n\n### 1.输入数据\n\n1. questionRange：题目范围：List(index,Question) \n\n1. 1. index：序列号，从0开始\n   2. Question：题目信息对象 \n\n1. 1. 1. id：题号（int）\n      2. tags：知识点标签（list[str]）\n      3. questionDifficulty：难度类型（简单（0）、中等（1）、困难（2）,int）\n      4. questionType：题目类型（文字题（1）、编程题（0），int）\n\n1. popScore：受众评分(0-5，float)\n2. questionNum：题目数量(0,len(questionRange),int)\n3. needTags：所需知识点(至多5个,str)\n4. typeRate：题目类型比例(文字题:编程题=0:1，int)\n5. difficultyRate：题目难度比例（简单:中等:困难=0:1:2，int）\n\n### 2.函数公式\n\n在构建遗传算法的适应度函数时，我们需要考虑可选题目范围、受众评分、所需知识点、题目类型比例以及题目难度比例等多个因素。\n\n**适应度函数公式：**\n\n```python\ndef max_fitness_function(solution, solution_idx):\n    # 根据solution索引数组获取题目信息数组\n    cur = [questionRange[e] for e in solution]\n\n    # 计算题目类型分布并归一化\n    type_distribution = calCurTypeRate(cur)\n\n    # 计算题目难度分布并归一化\n    difficulty_distribution = calCurDifficultyRate(cur)\n\n    # 计算题目受众分数\n    cur_popScore = calCurPopScore(difficulty_distribution)\n\n    # 计算适应度函数值（公式）\n    fitness = (\n            weight_popScore * (abs(popScore - cur_popScore) / popScore) +\n            weight_tags * calTagsLoss(cur) +\n            weight_typeRate * (abs(typeRate[0] - type_distribution[0]) + abs(typeRate[1] - type_distribution[1])) / 2 +\n            weight_difficultyRate * sum([abs(difficultyRate[i] - difficulty_distribution[i]) for i in range(3)]) / 3\n    )\n\n    return 1.0 / fitness\n```\n\n其中：\n\n1. `weight_popScore`、`weight_tags`、`weight_typeRate`、`weight_difficultyRate` 是权重系数，用于调整不同参数在适应度函数中的影响程度。这些系数可以根据实际需求进行调整。 \n\n2. `weight_popScore * (abs(popScore - cur_popScore) / popScore)`：受众评分的差异，表示题目与其受众分数和当前方案的受众分数的差距。\n\n3. `calTagsLoss(cur)`：计算选取的题目中覆盖所需知识点的的比例。通过求交集并除以所需知识点数量（最多5个）来评估知识点覆盖情况。 \n\n4. `type_distribution`：实际选取的题目类型分布比例，需要计算文字题和编程题各自在选取题目中的比例。 \n5. `(abs(typeRate[0] - type_distribution[0]) + abs(typeRate[1] - type_distribution[1])) / 2`：计算实际题目类型分布与期望类型分布的差异，取平均值来得到类型分布的差异度。 \n6. `difficulty_distribution`：实际选取的题目难度分布比例，需要计算三种难度在选取题目中的比例。 \n7.  `sum([abs(difficultyRate[i] - difficulty_distribution[i]) for i in range(3)])`：计算实际题目难度分布与期望难度分布的差异，取平均值来得到难度分布的差异度。 \n\n\n\n## （4）其余GA策略和参数\n\n```python\n    # pyGad参考链接：https://pygad.readthedocs.io/en/latest/pygad.html#pygad-ga-class\n    ga_instance = pygad.GA(\n        init_range_low=0,  # 初始种群个体的基因最小值\n        init_range_high=len(questionRange) - 1,  # 初始种群个体的基因最大值\n        num_generations=50,  # 代数\n        num_parents_mating=20,  # 要选择的父母解决方案数量\n        parent_selection_type=\"sss\",  # 选择策略（steady_state_selection：稳态选择：保证种群稳定性）\n        crossover_type=\"single_point\",  # 交叉策略（单点交叉：适用于二进制编码和实数编码等多种编码方式）\n        fitness_func=max_fitness_function,  # 适应度函数\n        sol_per_pop=100,  # 每一个种群中个体数量\n        num_genes=questionNum,  # 染色体基因的数量\n        gene_type=int,  # 基因值的数据类型\n        gene_space=range(0, len(questionRange)),  # 基因值的取值范围\n        allow_duplicate_genes=False,  # 是否允许染色体中存在重复的值\n        mutation_type=\"random\",  # 变异的类型：随机突变\n        mutation_percent_genes=5,  # 基因变异的百分比概率\n        random_mutation_min_val=0,  # 变异个体的基因最小值\n        random_mutation_max_val=len(questionRange) - 1  # 变异个体的基因最大值\n    )\n```\n\n\n\n## （5）完整代码\n\n代码主要包括：\n\n1. GA 各部分的实例代码\n2. Flask 的网络接口开发代码\n\n代码地址：https://gitee.com/sspuoj/sspuoj_ai_question_combine/tree/master/online\n\n\n\n## （6）测试效果\n\n![cwGID.png](https://i0.imgs.ovh/2024/03/13/cwGID.png)\n\n![cwNzo.png](https://i0.imgs.ovh/2024/03/13/cwNzo.png)\n\n（GA的逐代优化过程变化图）\n\n![cwvCA.png](https://i0.imgs.ovh/2024/03/13/cwvCA.png)\n\n\n\n**测试数据：**\n\n```json\n{\n    \"questionRange\": [\n        \"{\\\"questionId\\\": 1,\\\"tags\\\": [\\\"迭代\\\", \\\"递归\\\"],\\\"questionType\\\": 0,\\\"questionDifficulty\\\": 0}\",\n        \"{\\\"questionId\\\": 2,\\\"tags\\\": [\\\"迭代\\\", \\\"DFS\\\"],\\\"questionType\\\": 0,\\\"questionDifficulty\\\": 0}\",\n        \"{\\\"questionId\\\": 3,\\\"tags\\\": [\\\"迭代\\\", \\\"BFS\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 1}\",\n        \"{\\\"questionId\\\": 4,\\\"tags\\\": [\\\"数学\\\", \\\"递归\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 1}\",\n        \"{\\\"questionId\\\": 5,\\\"tags\\\": [\\\"前缀和\\\", \\\"循环\\\"],\\\"questionType\\\": 0,\\\"questionDifficulty\\\": 2}\",\n        \"{\\\"questionId\\\": 6,\\\"tags\\\": [\\\"DFS\\\", \\\"递归\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 2}\",\n        \"{\\\"questionId\\\": 7,\\\"tags\\\": [\\\"BFS\\\", \\\"递归\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 0}\",\n        \"{\\\"questionId\\\": 8,\\\"tags\\\": [\\\"双指针\\\"],\\\"questionType\\\": 0,\\\"questionDifficulty\\\": 1}\",\n        \"{\\\"questionId\\\": 9,\\\"tags\\\": [\\\"迭代\\\"],\\\"questionType\\\": 0,\\\"questionDifficulty\\\": 2}\",\n        \"{\\\"questionId\\\": 10,\\\"tags\\\": [\\\"递归\\\"],\\\"questionType\\\": 0,\\\"questionDifficulty\\\": 2}\",\n        \"{\\\"questionId\\\": 11,\\\"tags\\\": [\\\"迭代\\\", \\\"递归\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 1}\",\n        \"{\\\"questionId\\\": 12,\\\"tags\\\": [\\\"迭代\\\", \\\"DFS\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 1}\",\n        \"{\\\"questionId\\\": 13,\\\"tags\\\": [\\\"迭代\\\", \\\"递归\\\",\\\"DFS\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 0}\",\n        \"{\\\"questionId\\\": 14,\\\"tags\\\": [\\\"迭代\\\", \\\"递归\\\",\\\"BFS\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 0}\",\n        \"{\\\"questionId\\\": 15,\\\"tags\\\": [\\\"迭代\\\", \\\"递归\\\",\\\"AVL\\\"],\\\"questionType\\\": 1,\\\"questionDifficulty\\\": 0}\"\n    ],\n    \"popScore\": 3.5,\n    \"questionNum\": 5,\n    \"needTags\": [\n        \"DFS\",\n        \"BFS\",\n        \"递归\"\n    ],\n    \"typeRate\": [\n        0.3,\n        0.7\n    ],\n    \"difficultyRate\": [\n        0.2,\n        0.5,\n        0.3\n    ]\n}\n```",
+        "category": "文章",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 44,
+        "thumbNum": 1,
+        "favourNum": 2,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1721896042632441858",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-14 11:46:24",
+        "updateTime": "2024-03-26 15:24:29",
+        "user": {
+          "id": "1721896042632441858",
+          "planetCode": "29240",
+          "userName": "南侠（准）",
+          "userAvatar": "https://thirdwx.qlogo.cn/mmopen/vi_32/PiajxSqBRaELkfM4IsxxWrB70flGuaDcq55mDxh8r4DuwOJLuluSmRCH9Pk1MFibry5icVgHtfwMmnYGqT49svVKV3X1wMer2OCC3ob5leZX5lF8HMbPo1Qww/132",
+          "gender": null,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": null,
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": null,
+          "jobStatus": null,
+          "company": null,
+          "job": null,
+          "workYear": null,
+          "direction": null,
+          "goal": null,
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 4,
+          "followNum": 0,
+          "followStatus": null,
+          "vipExpireTime": "2024-11-05 22:14:23",
+          "lastLoginTime": null,
+          "createTime": "2023-11-07 22:23:02",
+          "updateTime": "2024-03-23 02:27:52"
+        },
+        "tags": [
+          "文章",
+          "后端",
+          "Python",
+          "算法"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      },
+      {
+        "id": "1767049141185273857",
+        "title": "WebSocket 在 JS 中的使用以及在 SpringBoot 中整合 WebSocket",
+        "description": "WebSocket 在 JS 以及 SpringBoot 中的使用",
+        "content": "# 前端 WebSocket 的一些使用\n\nWebSocket 是一种网络通信协议，用于实现双向通信。在前端中，你可以使用 JavaScript 中的 `WebSocket` 对象来创建 WebSocket 连接，发送和接收数据。\n\n## 连接的建立\n\n通过创建一个 WebSocket 对象建立一个 WebSocket 连接\n\n例如：\n\n```js\nconst ws = new WebSocket('ws://localhost:8080/channel/echo');\n```\n\n传给对象的参数是通过 WebSocket 协议通讯的网络地址。\n\n## 接收消息\n\n接收消息这里指的是接收服务端的消息。\n\n这里有两种方法。\n\n1. **使用 `addEventListener`**： 你可以使用 `addEventListener` 来监听 `message` 事件，这是最常见的方式，也是推荐的做法。\n\n    ```javascript\n    ws.addEventListener('message', (event) => {\n        const receivedMessage = event.data;\n        console.log('Received message from server:', receivedMessage);\n        // 在这里处理接收到的消息\n    });\n    ```\n\n2. **使用 `onmessage` 属性**： 除了使用 `addEventListener`，你还可以直接设置 `onmessage` 属性来指定消息处理函数。这与之前的示例相似，但更简洁：\n\n    ```javascript\n    ws.onmessage = function (event) {\n        const receivedMessage = event.data;\n        console.log('Received message from server:', receivedMessage);\n        // 在这里处理接收到的消息\n    };\n    ```\n\n## 发送消息\n\n**发送消息到服务器**： 使用 `send()` 方法将消息发送到服务器：\n\n```javascript\nws.send('Hello, server!'); // 发送消息给服务器\n```\n\n## 关闭连接\n\n**关闭 WebSocket 连接**： 要关闭 WebSocket 连接，你可以简单地使用 `WebSocket.close()` 方法，例如：\n\n```javascript\nws.close();\n```\n\n如果 WebSocket 连接的 `readyState` 已经处于 `CLOSE` 状态，那么该方法不会执行任何操作\n\n检查 WebSocket 是否打开： 你可以通过检查 `WebSocket` 的 `readyState` 属性来判断 WebSocket 是否打开。如果 `readyState` 的值为 `WebSocket.OPEN`，则表示连接已打开：\n\n```javascript\nif (ws.readyState === WebSocket.OPEN) {\n    // WebSocket 连接已打开\n}\n```\n\n这样你就可以在代码中判断 WebSocket 是否处于打开状态了\n\n## 处理\n\n**处理连接状态**： 你可以监听其他事件，例如 `open`、`close` 和 `error`，以处理连接的不同状态：\n\n```javascript\nws.addEventListener('open', (event) => {\n    console.log('WebSocket 已连接');\n});\n\nws.addEventListener('close', (event) => {\n    console.log('WebSocket 连接已关闭');\n});\n\nws.addEventListener('error', (event) => {\n    console.error('WebSocket 连接出现异常:', event.error);\n});\n```\n\n\n\n同样可以使用onclose 、 onerror 、 onopen 属性定义时间监听函数。\n\n# 在 Spring Boot 中整合、使用 WebSocket\n\nWebSocket 是一种基于 TCP 协议的全双工通信协议，它允许客户端和服务器之间建立持久的、双向的通信连接。相比传统的 HTTP 请求 - 响应模式，WebSocket 提供了实时、低延迟的数据传输能力。通过 WebSocket，客户端和服务器可以在任意时间点互相发送消息，实现实时更新和即时通信的功能。WebSocket 协议经过了多个浏览器和服务器的支持，成为了现代 Web 应用中常用的通信协议之一。它广泛应用于聊天应用、实时数据更新、多人游戏等场景，为 Web 应用提供了更好的用户体验和更高效的数据传输方式。\n\n本文将会指导你如何在 Spring Boot 中整合、使用 WebSocket，以及如何在 `@ServerEndpoint` 类中注入其他 Bean 依赖 。\n\n在 Spring Boot 中使用 WebSocket 有 2 种方式。第 1 种是使用由 Jakarta EE 规范提供的 Api，也就是 `jakarta.websocket` 包下的接口。第 2 种是使用 spring 提供的支持，也就是 [`spring-websocket`](https://github.com/spring-projects/spring-framework/tree/main/spring-websocket) 模块。前者是一种独立于框架的技术规范，而后者是 Spring 生态系统的一部分，可以与其他 Spring 模块（如 Spring MVC、Spring Security）无缝集成，共享其配置和功能。\n\n2 种方式各有优劣，你可以按需选择。本文将使用第 1 种方式，也就是使用 `jakarta.websocket` 来开发 WebSocket 应用。\n\n软件版本：\n\n- Spring Boot：`3.1.3`\n\n## 在 Spring Boot 中整合 WebSocket\n\n### 添加依赖\n\n在 `pom.xml` 中添加 `spring-boot-starter-websocket` 依赖。\n\n```xml\n<dependency>\n    <groupId>org.springframework.boot</groupId>\n    <artifactId>spring-boot-starter-websocket</artifactId>\n</dependency>\n```\n\n### 开发 ServerEndpoint 端点\n\n服务端 WebSocket 端点的开发也有 2 种方式。第 1 种是实现规范所提供的各种接口，通过接口定义的回调方法来处理新的连接、客户端消息、连接断开等等事件。另一种方式是使用注解，类似于 Spring 中的 Controller，通过在方法上使用不同的注解来监听不同的 WebSocket 事件，灵活性比较高，推荐使用。\n\n我们打算创建一个 `echo` 端点，该端点会处理客户端的连接、断开、消息事件。在收到消息后，我们会在消息前面加上服务器时间戳和 `Hello` 前缀，原样写回给客户端。如果客户端发送的消息为 `bye`，则服务器会主动断开与客户端的连接。\n\n```java\npackage cn.springdoc.demo.channel;\n\nimport java.io.IOException;\nimport java.time.Instant;\n\nimport org.slf4j.Logger;\nimport org.slf4j.LoggerFactory;\n\nimport jakarta.websocket.CloseReason;\nimport jakarta.websocket.EndpointConfig;\nimport jakarta.websocket.OnClose;\nimport jakarta.websocket.OnError;\nimport jakarta.websocket.OnMessage;\nimport jakarta.websocket.OnOpen;\nimport jakarta.websocket.Session;\nimport jakarta.websocket.server.ServerEndpoint;\n\n// 使用 @ServerEndpoint 注解表示此类是一个 WebSocket 端点\n// 通过 value 注解，指定 websocket 的路径\n@ServerEndpoint(value = \"/channel/echo\")\npublic class EchoChannel {\n\n    private static final Logger LOGGER = LoggerFactory.getLogger(EchoChannel.class);\n\n    private Session session;\n\n    // 收到消息\n    @OnMessage\n    public void onMessage(String message) throws IOException{\n        \n        LOGGER.info(\"[websocket] 收到消息：id={}，message={}\", this.session.getId(), message);\n        \n        if (message.equalsIgnoreCase(\"bye\")) {\n            // 由服务器主动关闭连接。状态码为 NORMAL_CLOSURE（正常关闭）。\n            this.session.close(new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, \"Bye\"));;\n            return;\n        }\n        \n        \n        this.session.getAsyncRemote().sendText(\"[\"+ Instant.now().toEpochMilli() +\"] Hello \" + message);\n    }\n\n    // 连接打开\n    @OnOpen\n    public void onOpen(Session session, EndpointConfig endpointConfig){\n        // 保存 session 到对象\n        this.session = session;\n        LOGGER.info(\"[websocket] 新的连接：id={}\", this.session.getId());\n    }\n\n    // 连接关闭\n    @OnClose\n    public void onClose(CloseReason closeReason){\n        LOGGER.info(\"[websocket] 连接断开：id={}，reason={}\", this.session.getId(),closeReason);\n    }\n\n    // 连接异常\n    @OnError\n    public void onError(Throwable throwable) throws IOException {\n        \n        LOGGER.info(\"[websocket] 连接异常：id={}，throwable={}\", this.session.getId(), throwable.getMessage());\n        \n        // 关闭连接。状态码为 UNEXPECTED_CONDITION（意料之外的异常）\n        this.session.close(new CloseReason(CloseReason.CloseCodes.UNEXPECTED_CONDITION, throwable.getMessage()));\n    }\n}\n```\n\n首先，使用 `@ServerEndpoint` 注解表示此类是一个 WebSocket 端点，`value` 属性是必须的，用于设置路由。它还有其他的一些可选属性可以用于自定义子协议、消息编码器、消息解码器、握手处理器等等，篇幅原因这里不展开。\n\n#### @OnMessage\n\n`@OnMessage` 注解用于监听客户端消息事件，它只有一个属性 `long maxMessageSize() default -1;` 用于限制客户端消息的大小，如果小于等于 0 则表示不限制。当客户端消息体积超过这个阈值，那么服务器就会主动断开连接，状态码为：`1009`。方法的参数可以是基本的 `String` / `byte[]` 或者是 `Reader` / `InputStream`，分别表示 WebSocket 中的文本和二进制消息。也可以是自定义的 Java 对象，但是需要在 `@ServerEndpoint` 中配置对象的解码器（`jakarta.websocket.Decoder`）。对于内容较长的消息，支持分批发送，可以在消息参数后面定义一个布尔类型的 `boolean last`参数，如果该值为 `true` 则表示此消息是批次消息中的最后一条。\n\n```java\n@OnMessage\npublic void onMessage(String message, boolean last) throws IOException{\n    if (last) {\n            // 这是批量消息的最后一条\n    }\n}\n```\n\n#### @OnOpen\n\n`@OnOpen` 方法用于监听客户端的连接事件，它没有任何属性。可以作为方法参数的对象有很多，`Session` 对象是必须的，表示当前连接对象，我们可以通过此对象来执行发送消息、断开连接等操作。WebSocket 的连接 URL，类似于 Http 的 URL，也可以传递查询参数、path 参数。通常用于传递认证、鉴权用的 Token 或其他信息。\n\n要获取查询参数，我们可以通过 `Session` 的 `getRequestParameterMap();` 获取。\n\n```java\nMap<String, List<String>> query = session.getRequestParameterMap();\n```\n\n要获取 path 参数，首先要在 `@ServerEndpoint` 中定义 path 参数，类似于 Spring Mvc 的 path 参数定义。例如： `@ServerEndpoint(value = \"/channel/echo/{id}\")`。那么我们可以在 `@OnOpen` 方法中使用 `@PathParam` 注解接收，如下：\n\n```java\n@ServerEndpoint(value = \"/channel/echo/{id}\")\n\n...\n\n@OnOpen\npublic void onOpen(Session session, @PathParam(\"id\") Long id, EndpointConfig endpointConfig){\n    ....\n}\n```\n\n示例中的最后一个参数 `EndpointConfig` ，它是可选，用于获取全局的一些配置。在本文中未用到。\n\n#### @OnClose\n\n`@OnClose` 用于处理连接断开事件，参数中可以指定一个 `CloseReason` 对象，它封装了断开连接的状态码、原因信息。\n\n#### @OnError\n\n`@OnError` 用于处理异常事件，**该方法必须要有一个 `Throwable` 类型的参数**，表示发生的异常。否则应用会启用失败：\n\n```txt\nCaused by: jakarta.websocket.DeploymentException: No Throwable parameter was present on the method [onError] of class [cn.springdoc.demo.channel.EchoChannel] that was annotated with OnError\n    at org.apache.tomcat.websocket.pojo.PojoMethodMapping.getPathParams(PojoMethodMapping.java:311) ~[tomcat-embed-websocket-10.1.12.jar:10.1.12]\n    at org.apache.tomcat.websocket.pojo.PojoMethodMapping.<init>(PojoMethodMapping.java:194) ~[tomcat-embed-websocket-10.1.12.jar:10.1.12]\n    at org.apache.tomcat.websocket.server.WsServerContainer.addEndpoint(WsServerContainer.java:130) ~[tomcat-embed-websocket-10.1.12.jar:10.1.12]\n    at org.apache.tomcat.websocket.server.WsServerContainer.addEndpoint(WsServerContainer.java:240) ~[tomcat-embed-websocket-10.1.12.jar:10.1.12]\n    at org.apache.tomcat.websocket.server.WsServerContainer.addEndpoint(WsServerContainer.java:198) ~[tomcat-embed-websocket-10.1.12.jar:10.1.12]\n    at org.springframework.web.socket.server.standard.ServerEndpointExporter.registerEndpoint(ServerEndpointExporter.java:156) ~[spring-websocket-6.0.11.jar:6.0.11]\n    ... 12 common frames omitted\n```\n\n所有事件方法，都支持使用 `Session` 作为参数，表示当前连接参数。但是为了更加方便，我们在 `@OnOpen` 事件中直接把 `Session` 存储到了当前对象中，可以在任意方法中使用 `this` 访问。服务器会为每个连接创建一个端点对象，所以这是线程安全的。\n\n上面还提到了一个 “连接关闭状态码”，WebSocket 协议定义了一系列状态码来表示连接断开的原因，这些状态码定义在了 `CloseReason.CloseCodes` 枚举中。\n\n### 配置 ServerEndpointExporter\n\n定义好端点后，需要在配置类中通过定义 `ServerEndpointExporter` Bean 进行注册。\n\n```java\npackage cn.springdoc.demo.config;\n\nimport org.springframework.context.annotation.Bean;\nimport org.springframework.context.annotation.Configuration;\nimport org.springframework.web.socket.server.standard.ServerEndpointExporter;\n\nimport cn.springdoc.demo.channel.EchoChannel;\n\n@Configuration\npublic class WebSocketConfiguration {\n\n    @Bean  \n    public ServerEndpointExporter serverEndpointExporter (){\n        \n        ServerEndpointExporter exporter = new ServerEndpointExporter();\n        \n        // 手动注册 WebSocket 端点\n        exporter.setAnnotatedEndpointClasses(EchoChannel.class);\n        \n        return exporter;\n    }  \n}\n```\n\n你也可以在 WebSocket 端点上添加 `@Component` 注解，使用 Spring 自动扫描，这样的话不需要手动调用 `setAnnotatedEndpointClasses` 方法进行注册。\n\n## 测试\n\n在项目的 `src/main/resources` 目录下创建一个 `public` 文件夹，再在此文件夹中新建一个 `index.html` 文件，作为 WebSocket 客户端。内容如下：\n\n> Spring Boot 默认会把 `public` 目录下的 `index.html` 作为应用主页。\n\n```html\n<!DOCTYPE html>\n<html>\n<head>\n    <meta charset=\"UTF-8\">\n    <title>WebSocket</title>\n</head>\n<body>\n    <script type=\"text/javascript\">\n        let websocket = new WebSocket(\"ws://localhost:8080/channel/echo\");\n        \n        // 连接断开\n        websocket.onclose = e => {\n            console.log(`连接关闭: code=${e.code}, reason=${e.reason}`)\n        }\n        // 收到消息\n        websocket.onmessage = e => {\n            console.log(`收到消息：${e.data}`);\n        }\n        // 异常\n        websocket.onerror = e => {\n            console.log(\"连接异常\")\n            console.error(e)\n        }\n        // 连接打开\n        websocket.onopen = e => {\n            console.log(\"连接打开\");\n            \n            // 创建连接后，往服务器连续写入3条消息\n            websocket.send(\"sprigdoc.cn\");\n            websocket.send(\"sprigdoc.cn\");\n            websocket.send(\"sprigdoc.cn\");\n            \n            // 最后发送 bye，由服务器断开连接\n            websocket.send(\"bye\");\n            \n            // 也可以由客户端主动断开\n            // websocket.close();\n        }\n    </script>\n</body>\n</html>\n```\n\n内容很简单，网页加载后运行 Javascript 代码。立即创建与 `ws://localhost:8080/channel/echo` 的 WebSocket 连接对象，通过注册对象的各种监听方法来处理事件。\n\n在连接就绪后，也就是在 `onopen` 方法中往服务器端点发送了 3 条消息。按照逻辑，服务端也会回复 3 条消息，这会触发 `onmessage` 事件，把消息内容输出到控制台。最后，发送 `bye`，服务器收到消息后会主动断开连接，这就会触发 `onclose` 事件，把 “连接关闭状态码” 和原因输出到控制台。\n\n> 其实你可以直接把这段 Javascript 代码复制到任意支持 WebSocket 的浏览器的控制台执行，WebSocket 没有跨域的说法！\n\n启动应用，打开浏览器（先打开控制台），然后访问 `http://localhost:8080/`，查看控制台输出的日志：\n\n```txt\n连接打开\n收到消息：[1694505275009] Hello sprigdoc.cn\n收到消息：[1694505275012] Hello sprigdoc.cn\n收到消息：[1694505275014] Hello sprigdoc.cn\n连接关闭: code=1000, reason=Bye\n```\n\n再看看服务端控制台日志：\n\n```txt\ncn.springdoc.demo.channel.EchoChannel    : [websocket] 新的连接：id=0\ncn.springdoc.demo.channel.EchoChannel    : [websocket] 收到消息：id=0，message=sprigdoc.cn\ncn.springdoc.demo.channel.EchoChannel    : [websocket] 收到消息：id=0，message=sprigdoc.cn\ncn.springdoc.demo.channel.EchoChannel    : [websocket] 收到消息：id=0，message=sprigdoc.cn\ncn.springdoc.demo.channel.EchoChannel    : [websocket] 收到消息：id=0，message=bye\ncn.springdoc.demo.channel.EchoChannel    : [websocket] 连接断开：id=0，reason=CloseReason: code [1000], reason [Bye]\n```\n\n没有任何问题，一切按照我们预定义的逻辑在运行。客户端发送 3 条消息，服务器响应 3 条消息，最后断开连接。客户端、服务器相应的事件方法都成功执行。\n\n服务端日志中的 sessionId（`id=0`），是通过 `Session` 的 `String getId();` 方法获取的。服务器会为每个连接分配一个不同的 id 值，不同服务器生成的 id 类型不一样。 Tomcat 使用从 0 开始的自增值（本例），Undertow 使用的是类似于 UUID 的 32 位长度的字符串。\n\n## 在端点中注入 Bean\n\n往往我们需要在端点中使用其他 Spring 管理的 Bean 来完成业务，例如认证、鉴权、保存消息。。。等等。\n\n假如我们有一个 `UserService` 服务类，内容如下：\n\n```java\npackage cn.springdoc.demo.service;\n\nimport org.springframework.stereotype.Service;\n\n@Service\npublic class UserService {\n    public void foo() {}\n\n    // ....\n}\n```\n\n我们现在要在端点中注入使用它，很多人会直接在端点类上使用 `@Component` 注解，然后注入：\n\n```java\n@ServerEndpoint(value = \"/channel/echo\")\n@Component  // 注册为 Spring 组件\npublic class EchoChannel {\n\n    @Autowired // 注入需要的 Bean\n    private UserService userService;\n\n    // ...\n\n    @OnOpen\n    public void onOpen(Session session, EndpointConfig endpointConfig){\n\n        this.session = session;\n\n        // 在业务中使用\n        this.userService.foo();\n    }\n}\n```\n\n服务可以正常启动，看似一切都没问题！可是当你在事件方法中使用这 Bean 的时候就会导致 `NullPointerException` 异常。\n\n```txt\njava.lang.NullPointerException: Cannot invoke \"cn.springdoc.demo.service.UserService.foo()\" because \"this.userService\" is null\n    at cn.springdoc.demo.channel.EchoChannel.onOpen(EchoChannel.java:54)\n    at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke0(Native Method)\n    at java.base/jdk.internal.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:77)\n    at java.base/jdk.internal.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)\n    at java.base/java.lang.reflect.Method.invoke(Method.java:568)\n    at org.apache.tomcat.websocket.pojo.PojoEndpointBase.doOnOpen(PojoEndpointBase.java:67)\n    at org.apache.tomcat.websocket.pojo.PojoEndpointServer.onOpen(PojoEndpointServer.java:46)\n    at org.apache.tomcat.websocket.server.WsHttpUpgradeHandler.init(WsHttpUpgradeHandler.java:131)\n    at org.apache.coyote.AbstractProtocol$ConnectionHandler.process(AbstractProtocol.java:936)\n    at org.apache.tomcat.util.net.NioEndpoint$SocketProcessor.doRun(NioEndpoint.java:1740)\n    at org.apache.tomcat.util.net.SocketProcessorBase.run(SocketProcessorBase.java:52)\n    at org.apache.tomcat.util.threads.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1191)\n    at org.apache.tomcat.util.threads.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:659)\n    at org.apache.tomcat.util.threads.TaskThread$WrappingRunnable.run(TaskThread.java:61)\n    at java.base/java.lang.Thread.run(Thread.java:833)\n```\n\n**原因：运行时的 WebSocket 连接对象，也就是端点实例，是由服务器创建，而不是 Spring，所以不能使用自动装配**。上文也提到过 “服务器会为每个连接创建一个端点实例对象”。\n\n知道了原因后，解决办法也很简单，我们可以使用 Spring 的 `ApplicationContextAware` 接口，在应用启动时获取到 `ApplicationContext` 并且保存在全局静态变量中。\n\n服务器每次创建连接的时候，我们就在 `@OnOpen` 事件方法中从 `ApplicationContext` 获取到需要 Bean 来初始化端点对象。\n\n```java\n@ServerEndpoint(value = \"/channel/echo\")\n@Component  // 由 spring 扫描管理\npublic class EchoChannel implements\n                ApplicationContextAware { // 实现 ApplicationContextAware 接口， Spring 会在运行时注入 ApplicationContext\n\n    private static final Logger LOGGER = LoggerFactory.getLogger(EchoChannel.class);\n\n    // 全局静态变量，保存 ApplicationContext\n    private static ApplicationContext applicationContext;\n\n    private Session session;\n\n    // 声明需要的 Bean\n    private UserService userService;\n\n\n    // 保存 Spring 注入的 ApplicationContext 到静态变量\n    @Override\n    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {\n        EchoChannel.applicationContext = applicationContext;\n    }\n\n    @OnOpen\n    public void onOpen(Session session, EndpointConfig endpointConfig){\n        \n        // 保存 session 到对象\n        this.session = session;\n        \n        // 连接创建的时候，从 ApplicationContext 获取到 Bean 进行初始化\n        this.userService = EchoChannel.applicationContext.getBean(UserService.class);\n        \n        // 在业务中使用\n        this.userService.foo();\n        \n        LOGGER.info(\"[websocket] 新的连接：id={}\", this.session.getId());\n    }\n    // ....\n}\n```\n\n`onOpen` 方法在整个连接的生命周期中，只会执行一次，所以这种方式不会带来通信时的性能损耗。",
+        "category": "文章",
+        "cover": null,
+        "language": null,
+        "externalLink": null,
+        "componentName": null,
+        "viewNum": 58,
+        "thumbNum": 6,
+        "favourNum": 4,
+        "commentNum": 0,
+        "priority": 0,
+        "userId": "1645799822881509377",
+        "reviewStatus": 1,
+        "reviewMessage": null,
+        "reviewerId": null,
+        "reviewTime": null,
+        "createTime": "2024-03-11 12:45:20",
+        "updateTime": "2024-03-24 19:51:12",
+        "user": {
+          "id": "1645799822881509377",
+          "planetCode": "14255",
+          "userName": "为",
+          "userAvatar": null,
+          "gender": 1,
+          "userProfile": null,
+          "userRole": "vip",
+          "interests": [],
+          "place": null,
+          "birthday": null,
+          "school": null,
+          "major": null,
+          "education": null,
+          "graduationYear": null,
+          "jobStatus": null,
+          "company": null,
+          "job": null,
+          "workYear": null,
+          "direction": null,
+          "goal": null,
+          "github": null,
+          "blog": null,
+          "score": 0,
+          "coin": 0,
+          "followeeNum": 0,
+          "followNum": 1,
+          "followStatus": null,
+          "vipExpireTime": "2024-10-01 21:19:43",
+          "lastLoginTime": null,
+          "createTime": "2023-04-11 22:43:49",
+          "updateTime": "2024-01-30 14:21:10"
+        },
+        "tags": [
+          "文章",
+          "Java",
+          "Spring",
+          "Javascript"
+        ],
+        "fileList": null,
+        "videoList": null,
+        "atUserList": null,
+        "pictureList": null,
+        "hasThumb": false,
+        "hasFavour": false,
+        "needVip": null,
+        "atUserVOList": null
+      }
+    ],
+    "total": "4215",
+    "size": "8",
+    "current": "1",
+    "orders": [],
+    "optimizeCountSql": true,
+    "searchCount": true,
+    "countId": null,
+    "maxLimit": null,
+    "pages": "527"
+  },
+  "message": "ok"
+}
