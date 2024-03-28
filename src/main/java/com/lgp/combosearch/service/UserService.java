@@ -1,6 +1,7 @@
 package com.lgp.combosearch.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.lgp.combosearch.model.dto.user.UserQueryRequest;
 import com.lgp.combosearch.model.entity.User;
@@ -116,4 +117,11 @@ public interface UserService extends IService<User> {
      */
     QueryWrapper<User> getQueryWrapper(UserQueryRequest userQueryRequest);
 
+    /**
+     * 获取用户封装
+     *
+     * @param userQueryRequest
+     * @return
+     */
+    Page<UserVO> listUserVOByPage(UserQueryRequest userQueryRequest);
 }

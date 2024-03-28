@@ -46,8 +46,6 @@ public class PictureServiceImpl implements PictureService {
         for (Element element : elements) {
             // 获取图片地址
             String m = element.select(".iusc").get(0).attr("m");
-            System.out.println(m);
-            System.out.println();
             Map<String, Object> map = JSONUtil.toBean(m, Map.class);
             String murl = (String) map.get("murl");
             // 获取标题

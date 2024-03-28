@@ -90,6 +90,17 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         }
     }
 
+    @Override
+    public Page<PostVO> listPostVOByPage(PostQueryRequest postQueryRequest, HttpServletRequest request) {
+        long current = postQueryRequest.getCurrent();
+        long size = postQueryRequest.getPageSize();
+
+        Page<Post> postPage = this.page(new Page<>(current, size),
+                this.getQueryWrapper(postQueryRequest));
+
+        return this.getPostVOPage(postPage, request);
+    }
+
     /**
      * 获取查询包装类
      *
@@ -113,7 +124,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         Long notId = postQueryRequest.getNotId();
         // 拼接查询条件
         if (StringUtils.isNotBlank(searchText)) {
-            queryWrapper.like("title", title).or().like("content", content);
+            queryWrapper.like("title", searchText).or().like("content", searchText);
         }
         queryWrapper.like(StringUtils.isNotBlank(title), "title", title);
         queryWrapper.like(StringUtils.isNotBlank(content), "content", content);
