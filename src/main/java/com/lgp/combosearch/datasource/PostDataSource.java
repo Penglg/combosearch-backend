@@ -2,14 +2,15 @@ package com.lgp.combosearch.datasource;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.lgp.combosearch.model.dto.post.PostQueryRequest;
+import com.lgp.combosearch.model.entity.Post;
 import com.lgp.combosearch.model.vo.PostVO;
 import com.lgp.combosearch.service.PostService;
+import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Component;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.annotation.Resource;
-import javax.servlet.http.HttpServletRequest;
+import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * 帖子服务实现
@@ -30,13 +31,18 @@ public class PostDataSource implements DataSource<PostVO> {
         postQueryRequest.setCurrent(pageNum);
         postQueryRequest.setPageSize(pageSize);
 
-        // TODO: 2024/3/29 request参数的优化
-        ServletRequestAttributes servletRequestAttributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        HttpServletRequest request = null;
-        if (servletRequestAttributes != null) {
-            request = servletRequestAttributes.getRequest();
-        }
-        return postService.listPostVOByPage(postQueryRequest, request);
+
+        List<Post> posts = postService.searchFromEs(postQueryRequest);
+        Page<PostVO> postVOPage = new Page<>();
+        postVOPage.setTotal(posts.size());
+        List<PostVO> postVOs = posts.stream().map(post -> {
+            PostVO postVO = new PostVO();
+            BeanUtils.copyProperties(post, postVO);
+            return postVO;
+        }).collect(Collectors.toList());
+        postVOPage.setRecords(postVOs);
+
+        return postVOPage;
     }
 }
 

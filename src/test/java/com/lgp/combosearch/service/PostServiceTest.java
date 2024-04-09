@@ -8,6 +8,8 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.List;
+
 /**
  * 帖子服务测试
  *
@@ -22,8 +24,8 @@ class PostServiceTest {
     void searchFromEs() {
         PostQueryRequest postQueryRequest = new PostQueryRequest();
         postQueryRequest.setUserId(1L);
-        Page<Post> postPage = postService.searchFromEs(postQueryRequest);
-        Assertions.assertNotNull(postPage);
+        List<Post> posts = postService.searchFromEs(postQueryRequest);
+        Assertions.assertNotNull(posts);
     }
 
 }

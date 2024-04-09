@@ -143,7 +143,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
     }
 
     @Override
-    public Page<Post> searchFromEs(PostQueryRequest postQueryRequest) {
+    public List<Post> searchFromEs(PostQueryRequest postQueryRequest) {
         Long id = postQueryRequest.getId();
         Long notId = postQueryRequest.getNotId();
         String searchText = postQueryRequest.getSearchText();
@@ -212,8 +212,6 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
         NativeSearchQuery searchQuery = new NativeSearchQueryBuilder().withQuery(boolQueryBuilder)
                 .withPageable(pageRequest).withSorts(sortBuilder).build();
         SearchHits<PostEsDTO> searchHits = elasticsearchRestTemplate.search(searchQuery, PostEsDTO.class);
-        Page<Post> page = new Page<>();
-        page.setTotal(searchHits.getTotalHits());
         List<Post> resourceList = new ArrayList<>();
         // 查出结果后，从 db 获取最新动态数据（比如点赞数）
         if (searchHits.hasSearchHits()) {
@@ -235,8 +233,7 @@ public class PostServiceImpl extends ServiceImpl<PostMapper, Post> implements Po
                 });
             }
         }
-        page.setRecords(resourceList);
-        return page;
+        return resourceList;
     }
 
     @Override

@@ -7,6 +7,7 @@ import com.lgp.combosearch.model.dto.post.PostQueryRequest;
 import com.lgp.combosearch.model.entity.Post;
 import com.lgp.combosearch.model.vo.PostVO;
 import javax.servlet.http.HttpServletRequest;
+import java.util.List;
 
 /**
  * 帖子服务
@@ -36,7 +37,7 @@ public interface PostService extends IService<Post> {
      * @param postQueryRequest
      * @return
      */
-    Page<Post> searchFromEs(PostQueryRequest postQueryRequest);
+    List<Post> searchFromEs(PostQueryRequest postQueryRequest);
 
     /**
      * 获取帖子封装

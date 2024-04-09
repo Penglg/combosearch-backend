@@ -31,9 +31,8 @@ public class PostEsDaoTest {
     @Test
     void test() {
         PostQueryRequest postQueryRequest = new PostQueryRequest();
-        com.baomidou.mybatisplus.extension.plugins.pagination.Page<Post> page =
-                postService.searchFromEs(postQueryRequest);
-        System.out.println(page);
+        List<Post> posts = postService.searchFromEs(postQueryRequest);
+        System.out.println(posts);
     }
 
     @Test
@@ -42,9 +41,7 @@ public class PostEsDaoTest {
         Page<PostEsDTO> PostPage = postEsDao.findAll(
                 PageRequest.of(0, 10, Sort.by("updateTime")));
         List<PostEsDTO> postList = PostPage.getContent();
-        postList.stream().forEach((post) -> {
-            System.out.println(post.getTitle());
-        });
+        postList.forEach((post) -> System.out.println(post.getTitle()));
     }
 
     @Test

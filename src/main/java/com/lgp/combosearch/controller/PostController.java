@@ -47,8 +47,6 @@ public class PostController {
 
     private final static Gson GSON = new Gson();
 
-    // region 增删改查
-
     /**
      * 创建
      *
@@ -206,7 +204,10 @@ public class PostController {
         long size = postQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
-        Page<Post> postPage = postService.searchFromEs(postQueryRequest);
+        List<Post> posts = postService.searchFromEs(postQueryRequest);
+        Page<Post> postPage = new Page<>();
+        postPage.setRecords(posts);
+        postPage.setTotal(posts.size());
         return ResultUtils.success(postService.getPostVOPage(postPage, request));
     }
 
