@@ -23,7 +23,6 @@
 - MySQL 数据库
 - Redis 内存数据库
 - Elasticsearch 搜索引擎
-- 腾讯云 COS 对象存储
 
 ### 工具类
 
