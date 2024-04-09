@@ -280,8 +280,6 @@ public class UserController {
         return ResultUtils.success(userVOPage);
     }
 
-    // endregion
-
     /**
      * 更新个人信息
      *

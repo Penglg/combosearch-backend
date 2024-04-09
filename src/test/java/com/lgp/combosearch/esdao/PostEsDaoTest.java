@@ -38,11 +38,13 @@ public class PostEsDaoTest {
 
     @Test
     void testSelect() {
-        System.out.println(postEsDao.count());
+        System.out.println("count: " + postEsDao.count());
         Page<PostEsDTO> PostPage = postEsDao.findAll(
-                PageRequest.of(0, 5, Sort.by("createTime")));
+                PageRequest.of(0, 10, Sort.by("updateTime")));
         List<PostEsDTO> postList = PostPage.getContent();
-        System.out.println(postList);
+        postList.stream().forEach((post) -> {
+            System.out.println(post.getTitle());
+        });
     }
 
     @Test
@@ -52,8 +54,6 @@ public class PostEsDaoTest {
         postEsDTO.setTitle("test");
         postEsDTO.setContent("test");
         postEsDTO.setTags(Arrays.asList("java", "python"));
-        postEsDTO.setThumbNum(1);
-        postEsDTO.setFavourNum(1);
         postEsDTO.setUserId(1L);
         postEsDTO.setCreateTime(new Date());
         postEsDTO.setUpdateTime(new Date());
