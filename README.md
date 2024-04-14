@@ -78,7 +78,7 @@
 ## 项目展示
 
 ### 接口文档
-访问http://localhost:8101/api/doc.html查看接口文档
+访问http://localhost:8101/api/doc.html
 ![图片](https://github.com/Penglg/combosearch-backend/assets/109449337/c5611d48-6317-41ee-b506-5a11dd3ec4ac)
 
 ### Kibana可视化 
